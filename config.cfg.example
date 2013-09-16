@@ -1,0 +1,6 @@
+urls=/index/newall/
+phpsessid=cookie from tabun.everypony.ru
+#sleep_time=5
+mysql_username=for tabun_backup plugin
+mysql_password=secret
+mysql_database=tabun_backup
