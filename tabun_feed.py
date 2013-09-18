@@ -20,6 +20,7 @@ config = {
     "sleep_time": "5",
     "plugins_dir": "plugins",
     "security_ls_key":"",
+    "key":"",
 }
 
 plugins = {}
@@ -326,7 +327,11 @@ def main():
     load_config()
     
     sleep_time = int(config["sleep_time"])
-    user = api.User(phpsessid=(config['phpsessid'] if config['phpsessid'] else None), security_ls_key=(config['security_ls_key'] if config['security_ls_key'] else None))
+    user = api.User(
+        phpsessid=(config['phpsessid'] if config['phpsessid'] else None),
+        security_ls_key=(config['security_ls_key'] if config['security_ls_key'] else None),
+        key=(config['key'] if config['key'] else None)
+    )
     if not user.phpsessid:
         anon = user
     else:
@@ -351,4 +356,4 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print
+        raise#print
