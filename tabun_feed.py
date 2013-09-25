@@ -21,12 +21,15 @@ config = {
     "plugins_dir": "plugins",
     "security_ls_key":"",
     "key":"",
+    "username": "",
+    "password": ""
 }
 
 plugins = {}
 handlers = {}
 
 user = None
+user_tic = 0
 anon = None
 db = None
 
@@ -222,6 +225,18 @@ def call_handlers(name, *args, **kwargs):
 r = 0
 def go():
     global r
+    global user_tic
+    
+    user_tic += 1
+    if user.username and user_tic >= 15 and config.get("password"):
+        user_tic = 0
+        if not user.parse_userinfo(user.urlopen("/").read(1024*15)):
+            try: user.login(config.get("username", user.username), config["password"])
+            except TabunError as exc:
+                console.stdprint(str(exc))
+            else:
+                console.stdprint("Relogined as", user.username)
+    
     urls = config['urls'].split(",")
     posts = []
     
@@ -330,12 +345,15 @@ def main():
     user = api.User(
         phpsessid=(config['phpsessid'] if config['phpsessid'] else None),
         security_ls_key=(config['security_ls_key'] if config['security_ls_key'] else None),
-        key=(config['key'] if config['key'] else None)
+        key=(config['key'] if config['key'] else None),
+        login=(config['username'] if config['username'] else None),
+        passwd=(config['password'] if config['password'] else None),
     )
     if not user.phpsessid:
         anon = user
     else:
         anon = api.User()
+        console.stdprint("Logined as", user.username)
     
     init_db()
     load_plugins()
