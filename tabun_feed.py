@@ -230,7 +230,7 @@ def go():
     user_tic += 1
     if user.username and user_tic >= 15 and config.get("password"):
         user_tic = 0
-        if not user.parse_userinfo(user.urlopen("/").read(1024*15)):
+        if not user.parse_userinfo(user.urlopen("/").read(1024*25)):
             try: user.login(config.get("username", user.username), config["password"])
             except TabunError as exc:
                 console.stdprint(str(exc))
