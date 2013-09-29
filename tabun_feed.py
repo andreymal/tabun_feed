@@ -230,12 +230,12 @@ def go():
     user_tic += 1
     if user.username and user_tic >= 15 and config.get("password"):
         user_tic = 0
-        if not user.parse_userinfo(user.urlopen("/").read(1024*25)):
-            try: user.login(config.get("username", user.username), config["password"])
-            except TabunError as exc:
-                console.stdprint(str(exc))
-            else:
+        try:
+            if not user.parse_userinfo(user.urlopen("/").read(1024*25)):
+                user.login(config.get("username", user.username), config["password"])
                 console.stdprint("Relogined as", user.username)
+        except api.TabunError as exc:
+            console.stdprint(str(exc))
     
     urls = config['urls'].split(",")
     posts = []
@@ -342,18 +342,28 @@ def main():
     load_config()
     
     sleep_time = int(config["sleep_time"])
-    user = api.User(
-        phpsessid=(config['phpsessid'] if config['phpsessid'] else None),
-        security_ls_key=(config['security_ls_key'] if config['security_ls_key'] else None),
-        key=(config['key'] if config['key'] else None),
-        login=(config['username'] if config['username'] else None),
-        passwd=(config['password'] if config['password'] else None),
-    )
-    if not user.phpsessid:
-        anon = user
-    else:
-        anon = api.User()
-        console.stdprint("Logined as", user.username)
+    while 1:
+        try:
+            user = api.User(
+                phpsessid=(config['phpsessid'] if config['phpsessid'] else None),
+                security_ls_key=(config['security_ls_key'] if config['security_ls_key'] else None),
+                key=(config['key'] if config['key'] else None),
+                login=(config['username'] if config['username'] else None),
+                passwd=(config['password'] if config['password'] else None),
+            )
+            if not user.phpsessid:
+                anon = user
+            else:
+                anon = api.User()
+                console.stdprint("Logined as", user.username)
+            break
+        except Exception as exc:
+            if isinstance(exc, api.TabunError):
+                console.stdprint(str(exc))
+            else:
+                traceback.print_exc()
+            time.sleep(5)
+            
     
     init_db()
     load_plugins()

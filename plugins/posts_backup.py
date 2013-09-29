@@ -5,6 +5,7 @@ import time
 import json
 import MySQLdb
 import tabun_api as api
+import lxml.etree
 
 je = json.JSONEncoder(ensure_ascii=False)
 
@@ -19,7 +20,7 @@ def post2json(post):
         'post_id': post.post_id,
         'author': post.author,
         'title': post.title,
-        'body': api.node2string(post.body),
+        'body': lxml.etree.tostring(post.body, method="html", encoding="utf-8"),
         'tags': post.tags,
         'blog_name': post.blog_name
     }
