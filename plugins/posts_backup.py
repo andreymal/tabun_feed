@@ -20,7 +20,7 @@ def post2json(post):
         'post_id': post.post_id,
         'author': post.author,
         'title': post.title,
-        'body': lxml.etree.tostring(post.body, method="html", encoding="utf-8"),
+        'body': lxml.etree.tostring(post.body, method="html", encoding="utf-8").decode("utf-8", "replace"),
         'tags': post.tags,
         'blog_name': post.blog_name
     }
@@ -39,15 +39,11 @@ def init_db():
 def backup_post(post, full_post=None):
     if full_post: post = full_post
     if post.private and not post.blog in api.halfclosed and not post.blog in ("ty_nyasha", "NSFW"): return
-    db.execute("delete from tabun_backup where post_id=%s", (post.post_id,) )
-    db.execute("insert into tabun_backup values(%s, %s, %s)", (post.post_id, time.mktime(post.time), post2json(post)) )
+    db.execute("replace into tabun_backup values(%s, %s, %s)", (post.post_id, time.mktime(post.time), post2json(post)) )
     db.execute("commit")
-    #console.stdprint("backuped")
 
 def init_tabun_plugin(env, register_handler):
     global user, db, console, db_conn
-    #env['console'].stdprint("please fix backup plugin")
-    #return
     user = env['user']
     console = env['console']
     c=env['config']

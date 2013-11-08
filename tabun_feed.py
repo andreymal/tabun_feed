@@ -168,7 +168,7 @@ def init_db():
     
     if create:
         #db.execute("create table log(time int, state varchar(1), post_id int, descr text)")
-        db.execute("create table lasts(type text, value int)")
+        db.execute("create table lasts(type text primary key, value int)")
         #db.execute("create table videos(link text primary key, video_id text)")
 
 def load_plugins():
@@ -228,7 +228,7 @@ def go():
     global user_tic
     
     user_tic += 1
-    if user.username and user_tic >= 15 and config.get("password"):
+    if user.username and user_tic >= 5 and config.get("password"):
         user_tic = 0
         try:
             if not user.parse_userinfo(user.urlopen("/").read(1024*25)):
@@ -236,6 +236,7 @@ def go():
                 console.stdprint("Relogined as", user.username)
         except api.TabunError as exc:
             console.stdprint(str(exc))
+        time.sleep(1)
     
     urls = config['urls'].split(",")
     posts = []
