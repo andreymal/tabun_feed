@@ -11,13 +11,15 @@ import traceback
 import tabun_api as api
 from threading import RLock
 
+api.headers_example["user-agent"] = 'tabun_feed/0.3; Linux/2.6'
+
 #sqlite3.threadsafety = 0
 
 config = {
     "phpsessid": "",
     "urls": "/blog/newall/,/personal_blog/newall/",
     "db": "tabun_feed.db",
-    "sleep_time": "5",
+    "sleep_time": "10",
     "plugins_dir": "plugins",
     "security_ls_key":"",
     "key":"",
@@ -135,6 +137,7 @@ def request_full_posts():
     get_full_posts = True
 
 def notify(data):
+    if isinstance(data, unicode): data = data.encode("utf-8")
     if not config.get("notify_group"): return
     data = config["notify_group"] + ":" + data
     os.system('notify "'+data.replace('"','\\"').replace("`","'") + '"')
@@ -223,11 +226,13 @@ def call_handlers(name, *args, **kwargs):
     return error
 
 r = 0
+relogin = False
 def go():
     global r
-    global user_tic
+    global relogin
+    #global user_tic
     
-    user_tic += 1
+    """user_tic += 1
     if user.username and user_tic >= 5 and config.get("password"):
         user_tic = 0
         try:
@@ -237,24 +242,40 @@ def go():
         except api.TabunError as exc:
             console.stdprint(str(exc))
         time.sleep(1)
+    print user_tic"""
+    
+    if relogin:
+        try:
+            user.login(config.get("username", user.username), config["password"])
+            console.stdprint("Relogined as", user.username)
+        except api.TabunError as exc:
+            console.stdprint(str(exc))
+        time.sleep(1)
     
     urls = config['urls'].split(",")
     posts = []
     
-    last_time = db.execute("select value from lasts where type='time'")#.fetchall()
+    last_time = db.execute("select value from lasts where type='time'")
     if last_time: last_time = last_time[0][0]
     else:
         last_time = 0
         db.execute("insert into lasts values('time', 0)")
     last_time = time.localtime(last_time)
     
-    last_bid = db.execute("select value from lasts where type='blog'")#.fetchall()
+    last_comment = db.execute("select value from lasts where type='comment_id'")
+    if last_comment: last_comment = last_comment[0][0]
+    else:
+        db.execute("insert into lasts values('comment_id', 0)")
+        last_comment = 0
+    
+    last_bid = db.execute("select value from lasts where type='blog'")
     if last_bid: last_bid = last_bid[0][0]
     else:
-        lase_bid = 0
+        last_bid = 0
         db.execute("insert into lasts values('blog', 0)")
     
     data = {}
+    comments = None
     blogs_list = None
     
     call_handlers("load", urls)
@@ -264,25 +285,33 @@ def go():
         console.set("get_tic", " r" + (":" if i%2==0 else ".") + str(r), position=0)
         try:
             raw_data = user.urlopen(urls[i]).read()
+            if not relogin and user.username and config.get("password"):
+                if not user.parse_userinfo(raw_data):
+                    relogin = True
+                    return go()
             data[urls[i]] = raw_data
             
-            ps = user.get_posts(urls[i], raw_data = raw_data)
-            #print user.username
-            posts.extend(ps)
+            if "/comments/" in urls[i]:
+                comments = user.get_comments(raw_data=raw_data)
+            else:
+                ps = user.get_posts(urls[i], raw_data=raw_data)
+                posts.extend(ps)
             
             if "/index/newall/" in urls[i]:
                 blogs_list = user.get_short_blogs_list(raw_data=raw_data)
+        
         except KeyboardInterrupt: raise
         except api.TabunError as exc:
-            #nprint("", str(exc))
             console.set("get_tic", " r " + str(r) + " " + str(exc))
         except socket.timeout:
             console.set("get_tic", " r " + str(r) + " timeout")
         except socket.error:
             console.set("get_tic", " r " + str(r) + " sock err")
+        else:
+            console.set("get_tic", " r " + str(r))
     r += 1
-    console.set("get_tic", " r " + str(r))
     
+    relogin = False
     call_handlers("post_load", data)
     
     if blogs_list:
@@ -302,6 +331,29 @@ def go():
                 error = call_handlers("blog", blog)
                 if error:
                     call_handlers("blog_error", blog)
+            except KeyboardInterrupt: raise
+            except:
+                traceback.print_exc()
+            finally:
+                db.commit()
+
+    if comments:
+        # новые комментарии
+        new_comments = []
+        comments.sort(key=lambda x:-x.comment_id)
+        
+        for comment in comments:
+            if comment.comment_id <= last_comment: break
+            new_comments.append(comment)
+        
+        new_comments.reverse()
+        for comment in new_comments:
+            try:
+                last_comment = comment.comment_id
+                db.execute("update lasts set value=? where type='comment_id'", (last_comment,) )
+                error = call_handlers("comment", comment, blogs_list)
+                if error:
+                    call_handlers("comment_error", blog)
             except KeyboardInterrupt: raise
             except:
                 traceback.print_exc()
@@ -343,6 +395,8 @@ def main():
     load_config()
     
     sleep_time = int(config["sleep_time"])
+    
+    errors = 0
     while 1:
         try:
             user = api.User(
@@ -363,7 +417,9 @@ def main():
                 console.stdprint(str(exc))
             else:
                 traceback.print_exc()
-            time.sleep(5)
+            errors += 1
+            if errors % 3 == 0: time.sleep(60)
+            else: time.sleep(5)
             
     
     init_db()
@@ -385,4 +441,4 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        raise#print
+        print

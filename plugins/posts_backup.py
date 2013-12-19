@@ -7,11 +7,14 @@ import MySQLdb
 import tabun_api as api
 import lxml.etree
 
+import urllib2
+
 je = json.JSONEncoder(ensure_ascii=False)
 
 user = None
 db = None
 console = None
+c = None # config
 
 def post2json(post):
     post_dict = {
@@ -39,17 +42,30 @@ def init_db():
 def backup_post(post, full_post=None):
     if full_post: post = full_post
     if post.private and not post.blog in api.halfclosed and not post.blog in ("ty_nyasha", "NSFW"): return
-    db.execute("replace into tabun_backup values(%s, %s, %s)", (post.post_id, time.mktime(post.time), post2json(post)) )
-    db.execute("commit")
+    try:
+        db.execute("replace into tabun_backup values(%s, %s, %s)", (post.post_id, time.mktime(post.time), post2json(post)) )
+        db.execute("commit")
+    except MySQLdb.OperationalError as e:
+        if e.args[0] not in (2006,): raise
+        mysql_connect()
+        backup_post(post, full_post)
+        return
+    
+    try:urllib2.urlopen("http://web.archive.org/save/http://tabun.everypony.ru/blog/" + ((post.blog+"/") if post.blog else "") + str(post.post_id) + ".html").read()
+    except IOError as e: console.stdprint("Cannot web.archive.org", post.post_id, e)
+
+def mysql_connect():
+    global db, db_conn, c
+    db_conn = MySQLdb.connect("localhost", c['mysql_username'], c['mysql_password'], c['mysql_database'])
+    db = db_conn.cursor()
 
 def init_tabun_plugin(env, register_handler):
-    global user, db, console, db_conn
+    global user, db, console, db_conn, c
     user = env['user']
     console = env['console']
     c=env['config']
     try:
-        db_conn = MySQLdb.connect("localhost", c['mysql_username'], c['mysql_password'], c['mysql_database'])
-        db = db_conn.cursor()
+        mysql_connect()
     except:
         console.stdprint("Cannot connect to mysql, backuper is disabled")
         return
@@ -66,4 +82,4 @@ def init_tabun_plugin(env, register_handler):
         console.stdprint("Backuped.")
     
     env['request_full_posts']()
-    register_handler("post", backup_post, priority=0)
+    register_handler("post", backup_post, priority=2)
