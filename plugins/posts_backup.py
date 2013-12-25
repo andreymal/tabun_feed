@@ -60,8 +60,7 @@ def mysql_connect():
     db = db_conn.cursor()
 
 def init_tabun_plugin(env, register_handler):
-    global user, db, console, db_conn, c
-    user = env['user']
+    global db, console, db_conn, c
     console = env['console']
     c=env['config']
     try:
@@ -70,7 +69,14 @@ def init_tabun_plugin(env, register_handler):
         console.stdprint("Cannot connect to mysql, backuper is disabled")
         return
     init_db()
+
+    env['request_full_posts']()
+    register_handler("set_user", start)
     
+    register_handler("post", backup_post, priority=2)
+
+
+def start(user, anon): 
     if not db.execute("select * from tabun_backup limit 0,1"):
         console.stdprint("Backuping...")
         posts = user.get_posts("/rss/new/")
@@ -80,6 +86,3 @@ def init_tabun_plugin(env, register_handler):
             backup_post(post, post)
             console.stdprint(post.post_id)
         console.stdprint("Backuped.")
-    
-    env['request_full_posts']()
-    register_handler("post", backup_post, priority=2)

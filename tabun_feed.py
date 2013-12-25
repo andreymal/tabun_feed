@@ -9,7 +9,7 @@ import socket
 import sqlite3
 import traceback
 import tabun_api as api
-from threading import RLock
+from threading import RLock, Event
 
 api.headers_example["user-agent"] = 'tabun_feed/0.3; Linux/2.6'
 
@@ -34,6 +34,8 @@ user = None
 user_tic = 0
 anon = None
 db = None
+
+quit_event = Event()
 
 class ThreadDB:
     def __init__(self, path):
@@ -190,11 +192,10 @@ def load_plugins():
             env = {
                 'config': config,
                 'db': db,
-                'user': user,
-                'anon': anon,
                 'notify': notify,
                 'request_full_posts': request_full_posts,
-                'console': console
+                'console': console,
+                'quit_event': quit_event,
             }
             
             plug.init_tabun_plugin(env, register_handler)
@@ -396,6 +397,9 @@ def main():
     
     sleep_time = int(config["sleep_time"])
     
+    init_db()
+    load_plugins()
+    
     errors = 0
     while 1:
         try:
@@ -420,10 +424,8 @@ def main():
             errors += 1
             if errors % 3 == 0: time.sleep(60)
             else: time.sleep(5)
-            
     
-    init_db()
-    load_plugins()
+    call_handlers("set_user", user, anon)
     
     try:
         while 1:
@@ -435,6 +437,7 @@ def main():
                 traceback.print_exc()
                 time.sleep(sleep_time)
     finally:
+        quit_event.set()
         call_handlers("quit")
 
 if __name__ == "__main__":
