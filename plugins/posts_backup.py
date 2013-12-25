@@ -76,7 +76,8 @@ def init_tabun_plugin(env, register_handler):
     register_handler("post", backup_post, priority=2)
 
 
-def start(user, anon): 
+def start(user, anon):
+    globals(['user']) = user
     if not db.execute("select * from tabun_backup limit 0,1"):
         console.stdprint("Backuping...")
         posts = user.get_posts("/rss/new/")
