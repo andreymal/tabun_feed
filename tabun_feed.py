@@ -27,6 +27,8 @@ config = {
     "password": ""
 }
 
+alivetime = 0
+
 plugins = {}
 handlers = {}
 
@@ -56,6 +58,7 @@ class Console:
         self.data = {}
         self.last_len = 0
         self.lock = RLock()
+        self.expander = None
 
     def set(self, key, value, position=-1):
         with self.lock:
@@ -75,7 +78,7 @@ class Console:
             self.data[key] = data
             
             self.print_all()
-        
+    
     def get(self, key):
         return self.data.get(key)
     
@@ -88,7 +91,8 @@ class Console:
     
     def clear(self):
         with self.lock:
-            sys.stdout.write("\r" + " "*self.last_len + "\r")
+            #sys.stdout.write("\r" + " "*self.last_len + "\r")
+            sys.stdout.write("\r\x1b[2K")
             
     def stdprint(self, *args, **kwargs):
         with self.lock:
@@ -101,15 +105,35 @@ class Console:
     
     def print_all(self):
         with self.lock:
-            sys.stdout.write("\r" + " "*self.last_len + "\r")
+            begin = ""
+            center = ""
+            end = ""
             self.last_len = 0
             for key in self.keys:
+                if key == self.expander:
+                    end = " | "
+                    continue
                 data = self.data[key]
-                sys.stdout.write(data[0])
+                tmp = data[0]
                 if len(data[0]) < data[1]:
-                    sys.stdout.write(" " * (data[1] - len(data[0])) )
-                sys.stdout.write(" | ")
-                self.last_len += data[1] + 3
+                    tmp += " " * (data[1] - len(data[0]))
+                tmp += " | "
+                if end: end += tmp
+                else: begin += tmp
+            exp = self.data.get(self.expander)
+            if exp:
+                w, h = self.get_term_size()
+                free = w - len(begin) - len(end) - 1
+                if free > 0:
+                    if free > len(exp[0]):
+                        center = exp[0] + u" " * (free - len(exp[0]))
+                    else:
+                        center = exp[0][:free]
+            #sys.stdout.write("\r" + " "*self.last_len + "\r")
+            sys.stdout.write("\r\x1b[2K")
+            out = begin + center + end
+            print out,
+            self.last_len += len(out)
             sys.stdout.flush()
 
     def bprint(self, *args):
@@ -128,7 +152,32 @@ class Console:
         with self.lock:
             for x in args: print x,
             sys.stdout.flush()
-   
+
+    def set_expanded(self, key):
+        self.expander = key
+
+    def get_term_size(self):
+        env = os.environ
+        def ioctl_GWINSZ(fd):
+            try:
+                import fcntl, termios, struct
+                cr = struct.unpack('hh', fcntl.ioctl(fd, termios.TIOCGWINSZ,
+            '1234'))
+            except:
+                return
+            return cr
+        cr = ioctl_GWINSZ(0) or ioctl_GWINSZ(1) or ioctl_GWINSZ(2)
+        if not cr:
+            try:
+                fd = os.open(os.ctermid(), os.O_RDONLY)
+                cr = ioctl_GWINSZ(fd)
+                os.close(fd)
+            except:
+                pass
+        if not cr:
+            cr = (env.get('LINES', 25), env.get('COLUMNS', 80))
+        return int(cr[1]), int(cr[0])
+
 console = Console() 
   
   
@@ -231,6 +280,7 @@ relogin = False
 def go():
     global r
     global relogin
+    global alivetime
     #global user_tic
     
     """user_tic += 1
@@ -280,6 +330,14 @@ def go():
     blogs_list = None
     
     call_handlers("load", urls)
+    
+    if time.time() - alivetime >= 15 and config.get("alivefile"):
+        try:
+            alivetime = time.time()
+            with open(config["alivefile"], "wb") as fp:
+                fp.write(str(int(alivetime)) + "\n")
+        except:
+            traceback.print_exc()
     
     for i in range(len(urls)):
         #nprint(" r"+(":" if i%2==0 else "."))
@@ -397,8 +455,13 @@ def main():
     
     sleep_time = int(config["sleep_time"])
     
+    pidfile = config.get("pidfile")
+    
     init_db()
     load_plugins()
+    
+    if pidfile:
+        with open(pidfile, "wb") as fp: fp.write(str(os.getpid()) + "\n")
     
     errors = 0
     while 1:
@@ -418,7 +481,7 @@ def main():
             break
         except Exception as exc:
             if isinstance(exc, api.TabunError):
-                console.stdprint(str(exc))
+                console.stdprint("init error:", str(exc))
             else:
                 traceback.print_exc()
             errors += 1
@@ -437,8 +500,12 @@ def main():
                 traceback.print_exc()
                 time.sleep(sleep_time)
     finally:
-        quit_event.set()
-        call_handlers("quit")
+        try:
+            quit_event.set()
+            call_handlers("quit")
+        finally:
+            if pidfile:
+                if os.path.isfile(pidfile): os.remove(pidfile)
 
 if __name__ == "__main__":
     try:
