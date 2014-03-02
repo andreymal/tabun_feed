@@ -68,6 +68,7 @@ def stories_thread():
     
     console.stdprint("Stories thread started")
     cset(' ')
+    errored = False
     while 1:
         try:
             cset('n', req=True)
@@ -78,10 +79,17 @@ def stories_thread():
             cset('u', req=True)
             try: upd_stories = user.get_updates()
             except sapi.StoriesError as exc:
-                console.stdprint("Stories error:", exc)
-                quit.wait(30)
+                cset(req=False)
+                if not errored: console.stdprint("Stories error:", exc)
+                errored = True
+                quit.wait(60)
+                if quit.isSet(): break
+                continue
             cset(req=False)
             if quit.isSet(): break
+            if errored:
+                console.stdprint("Stories alive")
+                errored = False
             
             updated = []
             
@@ -118,6 +126,8 @@ def stories_thread():
                     quit.wait(10)
                 if quit.isSet(): break
             last_story = stories[0].story_id
+        except sapi.StoriesError as exc:
+            console.stdprint("stories error:", exc)
         except:
             traceback.print_exc()
         finally:
@@ -163,6 +173,7 @@ def backup_story(story):
 def mysql_connect():
     global db, db_conn
     db_conn = MySQLdb.connect("localhost", c['mysql_username'], c['mysql_password'], c['mysql_database'], charset="utf8")
+    db_conn.ping(True)
     db = db_conn.cursor()
 
 def init_tabun_plugin(env, register_handler):
