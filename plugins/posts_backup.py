@@ -48,8 +48,7 @@ def backup_post(post, full_post=None):
     except MySQLdb.OperationalError as e:
         if e.args[0] not in (2006,): raise
         mysql_connect()
-        backup_post(post, full_post)
-        return
+        return backup_post(post, full_post)
     
     try:urllib2.urlopen("http://web.archive.org/save/http://tabun.everypony.ru/blog/" + ((post.blog+"/") if post.blog else "") + str(post.post_id) + ".html").read()
     except IOError as e: console.stdprint("Cannot web.archive.org", post.post_id, e)
@@ -57,6 +56,7 @@ def backup_post(post, full_post=None):
 def mysql_connect():
     global db, db_conn, c
     db_conn = MySQLdb.connect("localhost", c['mysql_username'], c['mysql_password'], c['mysql_database'])
+    db_conn.ping(True)
     db = db_conn.cursor()
 
 def init_tabun_plugin(env, register_handler):
