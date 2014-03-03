@@ -277,10 +277,12 @@ def call_handlers(name, *args, **kwargs):
 
 r = 0
 relogin = False
+old_unread = 0
 def go():
     global r
     global relogin
     global alivetime
+    global old_unread
     #global user_tic
     
     """user_tic += 1
@@ -345,7 +347,7 @@ def go():
         try:
             raw_data = user.urlopen(urls[i]).read()
             if not relogin and user.username and config.get("password"):
-                if not user.parse_userinfo(raw_data):
+                if not user.update_userinfo(raw_data):
                     relogin = True
                     return go()
             data[urls[i]] = raw_data
@@ -369,6 +371,10 @@ def go():
         else:
             console.set("get_tic", " r " + str(r))
     r += 1
+    
+    if user.talk_unread > old_unread:
+        call_handlers("talk_unread")
+    old_unread = user.talk_unread
     
     relogin = False
     call_handlers("post_load", data)
