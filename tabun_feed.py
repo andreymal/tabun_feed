@@ -245,6 +245,7 @@ def load_plugins():
                 'request_full_posts': request_full_posts,
                 'console': console,
                 'quit_event': quit_event,
+                'reset_unread': reset_unread,
             }
             
             plug.init_tabun_plugin(env, register_handler)
@@ -278,6 +279,11 @@ def call_handlers(name, *args, **kwargs):
 r = 0
 relogin = False
 old_unread = 0
+def reset_unread(value=-1):
+    global old_unread
+    if value <= 0: old_unread = 0
+    else: old_unread -= value
+
 def go():
     global r
     global relogin
