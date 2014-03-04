@@ -276,6 +276,12 @@ def call_handlers(name, *args, **kwargs):
                 error = True
     return error
 
+def get_db_last(typ, default=0):
+    last = db.execute("select value from lasts where type=?", (typ,))
+    if last: return last[0][0]
+    db.execute("insert into lasts values(?, ?)", (typ, default))
+    return default
+
 r = 0
 relogin = False
 old_unread = 0
@@ -285,28 +291,12 @@ def reset_unread(value=-1):
     else: old_unread -= value
 
 def go():
-    global r
-    global relogin
-    global alivetime
-    global old_unread
-    #global user_tic
-    
-    """user_tic += 1
-    if user.username and user_tic >= 5 and config.get("password"):
-        user_tic = 0
-        try:
-            if not user.parse_userinfo(user.urlopen("/").read(1024*25)):
-                user.login(config.get("username", user.username), config["password"])
-                console.stdprint("Relogined as", user.username)
-        except api.TabunError as exc:
-            console.stdprint(str(exc))
-        time.sleep(1)
-    print user_tic"""
+    global r, relogin, alivetime, old_unread
     
     if relogin:
         try:
             user.login(config.get("username", user.username), config["password"])
-            console.stdprint("Relogined as", user.username)
+            console.stdprint(time.strftime("%H:%M:%S"), "Relogined as", user.username)
         except api.TabunError as exc:
             console.stdprint(str(exc))
         time.sleep(1)
@@ -314,27 +304,13 @@ def go():
     urls = config['urls'].split(",")
     posts = []
     
-    last_time = db.execute("select value from lasts where type='time'")
-    if last_time: last_time = last_time[0][0]
-    else:
-        last_time = 0
-        db.execute("insert into lasts values('time', 0)")
-    last_time = time.localtime(last_time)
-    
-    last_comment = db.execute("select value from lasts where type='comment_id'")
-    if last_comment: last_comment = last_comment[0][0]
-    else:
-        db.execute("insert into lasts values('comment_id', 0)")
-        last_comment = 0
-    
-    last_bid = db.execute("select value from lasts where type='blog'")
-    if last_bid: last_bid = last_bid[0][0]
-    else:
-        last_bid = 0
-        db.execute("insert into lasts values('blog', 0)")
+    last_time = time.localtime(get_db_last('time'))
+    last_post = get_db_last('post_id')
+    last_comment = get_db_last('comment_id')
+    last_bid = get_db_last('blog')
     
     data = {}
-    comments = None
+    comments = []
     blogs_list = None
     
     call_handlers("load", urls)
@@ -348,7 +324,6 @@ def go():
             traceback.print_exc()
     
     for i in range(len(urls)):
-        #nprint(" r"+(":" if i%2==0 else "."))
         console.set("get_tic", " r" + (":" if i%2==0 else ".") + str(r), position=0)
         try:
             raw_data = user.urlopen(urls[i]).read()
@@ -358,8 +333,18 @@ def go():
                     return go()
             data[urls[i]] = raw_data
             
-            if "/comments/" in urls[i]:
-                comments = user.get_comments(raw_data=raw_data)
+            if urls[i] == '/comments/':
+                comments.extend(user.get_comments(raw_data=raw_data))
+                comments.sort(key=lambda x:-x.comment_id)
+                
+                cpage = 1
+                while last_comment > 0 and comments and comments[-1].comment_id > last_comment:
+                    cpage += 1
+                    console.stdprint("Load comments, page", cpage)
+                    raw_data2 = user.urlopen("/comments/page" + str(cpage) + "/").read()
+                    time.sleep(1)
+                    comments.extend(user.get_comments(raw_data=raw_data2))
+                    comments.sort(key=lambda x:-x.comment_id)
             else:
                 ps = user.get_posts(urls[i], raw_data=raw_data)
                 posts.extend(ps)
@@ -411,7 +396,6 @@ def go():
     if comments:
         # новые комментарии
         new_comments = []
-        comments.sort(key=lambda x:-x.comment_id)
         
         for comment in comments:
             if comment.comment_id <= last_comment: break
@@ -433,12 +417,14 @@ def go():
     
     # посты
     
-    posts.sort(lambda a,b: cmp(a.time, b.time))
+    posts.sort(key=lambda x:x.time)
     
-    last_pid = 0
+    last_pid = 0 # исключает дубликаты из цикла (они могут возникать при запросе постов с нескольких адресов)
     for post in posts:
         try:
-            if post.time <= last_time or post.post_id == last_pid: continue
+            if post.time < last_time or (post.time == last_time and post.post_id <= last_post) or post.post_id == last_pid:
+                continue
+            
             if get_full_posts:
                 if not post.short: full_post = post
                 else:
@@ -447,9 +433,11 @@ def go():
                     except api.TabunError: time.sleep(0.25); return
             else:
                 full_post = None
+                
             last_pid = post.post_id
             last_time = post.time
             db.execute("update lasts set value=? where type='time'", (time.mktime(last_time),))
+            db.execute("update lasts set value=? where type='post_id'", (post.post_id,))
             r = 0
             if full_post: error = call_handlers("post", post, full_post)
             else: error = call_handlers("post", post)
