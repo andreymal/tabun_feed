@@ -1,9 +1,14 @@
-urls=/index/newall/
+urls=/index/newall/,/comments/
+#sleep_time=5
+
 phpsessid=cookie from tabun.everypony.ru
 key=cookie from tabun.everypony.ru
 username=Orhideous
 password=123456
-#sleep_time=5
-mysql_username=for tabun_backup plugin
-mysql_password=secret
-mysql_database=tabun_backup
+
+#mysql_username=for tabun_backup plugin
+#mysql_password=secret
+#mysql_database=tabun_backup
+
+#pidfile=.pid
+#alivefile=.alive
