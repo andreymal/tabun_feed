@@ -473,7 +473,7 @@ def main():
                 login=(config['username'] if config['username'] else None),
                 passwd=(config['password'] if config['password'] else None),
             )
-            if config.get('timeout'): user.timeout = int(config['timeout'])
+            if config.get('timeout'): anon.timeout = int(config['timeout'])
             if not user.phpsessid:
                 anon = user
             else:
@@ -513,4 +513,4 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print
+        raise#print
