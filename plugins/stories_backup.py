@@ -69,6 +69,7 @@ def stories_thread():
     console.stdprint("Stories thread started")
     cset(' ')
     errored = False
+    err = 0
     while 1:
         try:
             cset('n', req=True)
@@ -128,6 +129,10 @@ def stories_thread():
             last_story = stories[0].story_id
         except sapi.StoriesError as exc:
             console.stdprint("stories error:", exc)
+            err += 1
+            if err >= 3:
+                err = 0
+                quit.wait(120)
         except:
             traceback.print_exc()
         finally:

@@ -473,10 +473,12 @@ def main():
                 login=(config['username'] if config['username'] else None),
                 passwd=(config['password'] if config['password'] else None),
             )
+            if config.get('timeout'): user.timeout = int(config['timeout'])
             if not user.phpsessid:
                 anon = user
             else:
                 anon = api.User()
+                if config.get('timeout'): user.timeout = int(config['timeout'])
                 console.stdprint("Logined as", user.username)
             break
         except Exception as exc:
