@@ -6,10 +6,12 @@ key=cookie from tabun.everypony.ru
 username=Orhideous
 password=123456
 
-#mysql_username=for tabun_backup plugin
+#mysql_username=for mysql plugin
 #mysql_password=secret
 #mysql_database=tabun_backup
 
 #timeout=20
 #pidfile=.pid
 #alivefile=.alive
+
+#get_comments_max_pages=0
