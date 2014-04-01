@@ -22,7 +22,7 @@ def load(urls):
             ppl = anon.get_profile(people.username)
             console.stdprint(time.strftime("%H:%M:%S", ppl.registered), "New user", people.username)
             last_list.append(people.username)
-            last_list = last_list[-50:]
+            last_list = last_list[-15:]
             db.execute("replace into tabun_people values(%s, %s, %s, %s)", (ppl.username, time.mktime(ppl.registered),
                 time.mktime(ppl.birthday) if ppl.birthday else None, time.strftime('%d.%m.%Y', ppl.birthday) if ppl.birthday else None,))
     
@@ -49,7 +49,8 @@ def init_tabun_plugin(tf):
         return
     init_db()
     
-    last_list = map(lambda x:str(x[0]), db.execute("select username from tabun_people order by time desc limit 0,50").fetchall())
+    last_list = map(lambda x:str(x[0]), db.execute("select username from tabun_people order by time desc limit 0,15").fetchall())
+    last_list.reverse()
     
     tabun_feed.add_handler("load", load)
     tabun_feed.add_handler("set_user", start)
