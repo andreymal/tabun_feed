@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import MySQLdb
-from threading import RLock
+from threading import Lock, RLock
 
 db = None
 tabun_feed = None
@@ -67,7 +67,8 @@ class DB:
             self.db_conn.close()
 
 def connect():
-    return DB(tf.config.get("mysql_username"), tf.config.get("mysql_password"), tf.config.get("mysql_database"))
+    c = tabun_feed.config
+    return DB(c.get("mysql_username"), c.get("mysql_password"), c.get("mysql_database"))
 
 def init_tabun_plugin(tf):
     global db, tabun_feed

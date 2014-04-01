@@ -13,8 +13,6 @@ from threading import RLock, Event
 
 api.headers_example["user-agent"] = 'tabun_feed/0.3; Linux/2.6'
 
-#sqlite3.threadsafety = 0
-
 config = {
     "phpsessid": "",
     "urls": "/blog/newall/,/personal_blog/newall/",
@@ -24,9 +22,12 @@ config = {
     "security_ls_key":"",
     "key":"",
     "username": "",
-    "password": ""
+    "password": "",
+    "get_comments_max_pages": "2",
+
 }
 
+debug = False
 alivetime = 0
 
 plugins = {}
@@ -43,15 +44,21 @@ class ThreadDB:
     def __init__(self, path):
         self.db = sqlite3.connect(path, check_same_thread=False)
         self.lock = RLock()
+        if debug: console.stdprint("-DB loaded")
     
     def execute(self, *args):
         with self.lock:
+            if debug: console.stdprint("-DB", args)
             return self.db.execute(*args).fetchall()
     
     def commit(self):
         with self.lock:
-            self.db.commit()
-
+            if debug: console.stdprint("-DB commit")
+            try: self.db.commit()
+            except KeyboardInterrupt:
+                console.stdprint("commit break!")
+                raise 
+            
 class Console:
     def __init__(self):
         self.keys = []
@@ -178,9 +185,8 @@ class Console:
             cr = (env.get('LINES', 25), env.get('COLUMNS', 80))
         return int(cr[1]), int(cr[0])
 
-console = Console() 
-  
-  
+console = Console()
+
 get_full_posts = False
 
 def request_full_posts():
@@ -225,37 +231,73 @@ def init_db():
         db.execute("create table lasts(type text primary key, value int)")
         #db.execute("create table videos(link text primary key, video_id text)")
 
-def load_plugins():
-    plugins_dir = config['plugins_dir']
-    files = sorted(os.listdir(plugins_dir))
-    for f in files:
-        if f[-3:] != ".py": continue
-        fp = open(plugins_dir + "/" + f, "U")
+class TabunFeed:
+    def __init__(self, plugin_name):
+        self.plugin_name = plugin_name
+        self.db = db
+        self.notify = notify
+        self.config = config
+        self.request_full_posts = request_full_posts
+        self.console = console
+        self.quit_event = quit_event
+        self.reset_unread = reset_unread
+        self.require = require
+        self.PluginError = PluginError
+        self.add_handler = add_handler
+        self.call_handlers = call_handlers
+        self.get_db_last = get_db_last
+        self.set_db_last = set_db_last
+
+class PluginError(Exception): pass
+
+def require(plugin_name):
+    global plugins
+    plugin_name = str(plugin_name).replace('/', '').replace(' ', '_')
+    try: return plugins[plugin_name]
+    except KeyError: pass
+
+    plugin_file = config['plugins_dir'] + '/' + plugin_name
+    if os.path.isdir(plugin_file):
+        if os.path.exists(plugin_file + '/' + plugin_name + '.py'):
+            plugin_file +=  '/' + plugin_name + '.py'
+        else:
+            plugin_file += '/plugin.py'
+    else: plugin_file += '.py'
+    try: fp = open(plugin_file, "U")
+    except: raise PluginError
+
+    try:
+        name = "tabun_plugin_" + plugin_name
+        description = ('.py', 'U', 1)
         try:
-            name = "tabun_plugin_" + f[:-3].replace(".","_").replace(" ", "_")
-            plugin_file = plugins_dir + "/" + f
-            description = ('.py', 'U', 1)
-            
             plug = imp.load_module(name, fp, plugin_file, description)
-            plugins[name] = plug
-            env = {
-                'config': config,
-                'db': db,
-                'notify': notify,
-                'request_full_posts': request_full_posts,
-                'console': console,
-                'quit_event': quit_event,
-                'reset_unread': reset_unread,
-            }
-            
-            plug.init_tabun_plugin(env, register_handler)
         except KeyboardInterrupt: raise
         except:
             traceback.print_exc()
-        finally:
-            fp.close()
+            raise PluginError
+    
+        plugins[plugin_name] = plug
+        try: plug.init_tabun_plugin(TabunFeed(plugin_name))
+        except: traceback.print_exc() #TODO: как-нить обработать
+        return plug
+    finally:
+        fp.close()
 
-def register_handler(name, func, priority=1):
+def load_plugins():
+    plugins_dir = config['plugins_dir']
+    if not os.path.exists(plugins_dir):
+        console.stdprint("Plugins dir not found! :(")
+        return
+    files = sorted(os.listdir(plugins_dir))
+    for f in files:
+        if f[-3:] == ".py": f = f[:-3]
+        elif not os.path.isdir(plugins_dir + '/' + f): continue
+        try:
+            require(f)
+        except PluginError:
+            console.stdprint(f, "plugin failed")
+
+def add_handler(name, func, priority=1):
     if isinstance(name, unicode): name = name.encode("utf-8")
     elif not isinstance(name, str): return
     funcs = handlers.get(name)
@@ -265,7 +307,7 @@ def register_handler(name, func, priority=1):
     funcs[priority].append(func)
 
 def call_handlers(name, *args, **kwargs):
-    error = False
+    error = 0
     for pr in handlers.get(name, []):
         for func in pr:
             try:
@@ -273,7 +315,7 @@ def call_handlers(name, *args, **kwargs):
             except KeyboardInterrupt: raise
             except:
                 traceback.print_exc()
-                error = True
+                error += 1
     return error
 
 def get_db_last(typ, default=0):
@@ -281,6 +323,9 @@ def get_db_last(typ, default=0):
     if last: return last[0][0]
     db.execute("insert into lasts values(?, ?)", (typ, default))
     return default
+
+def set_db_last(typ, value):
+    db.execute("replace into lasts values(?, ?)", (typ, value))
 
 r = 0
 relogin = False
@@ -323,12 +368,14 @@ def go():
         except:
             traceback.print_exc()
     
+    updated = False
     for i in range(len(urls)):
         console.set("get_tic", " r" + (":" if i%2==0 else ".") + str(r), position=0)
         try:
             raw_data = user.urlopen(urls[i]).read()
-            if not relogin and user.username and config.get("password"):
-                if not user.update_userinfo(raw_data):
+            if not updated:
+                old_user = user.username
+                if not user.update_userinfo(raw_data) and old_user and not relogin and config.get("password"):
                     relogin = True
                     return go()
             data[urls[i]] = raw_data
@@ -338,7 +385,8 @@ def go():
                 comments.sort(key=lambda x:-x.comment_id)
                 
                 cpage = 1
-                while last_comment > 0 and comments and comments[-1].comment_id > last_comment:
+                cpage_max = int(config.get("get_comments_max_pages", 0))
+                while (not cpage_max or cpage < cpage_max) and last_comment > 0 and comments and comments[-1].comment_id > last_comment:
                     cpage += 1
                     console.stdprint("Load comments, page", cpage)
                     raw_data2 = user.urlopen("/comments/page" + str(cpage) + "/").read()
@@ -390,8 +438,7 @@ def go():
             except KeyboardInterrupt: raise
             except:
                 traceback.print_exc()
-            finally:
-                db.commit()
+        db.commit()
 
     if comments:
         # новые комментарии
@@ -412,9 +459,8 @@ def go():
             except KeyboardInterrupt: raise
             except:
                 traceback.print_exc()
-            finally:
-                db.commit()
-    
+        db.commit()
+        
     # посты
     
     posts.sort(key=lambda x:x.time)
@@ -446,11 +492,11 @@ def go():
         except KeyboardInterrupt: raise
         except:
             traceback.print_exc()
-        finally:
-            db.commit()
+    db.commit()
 
 def main():
-    global user, anon
+    global user, anon, debug
+    if "-d" in sys.argv: debug = True
     load_config()
     
     sleep_time = int(config["sleep_time"])
@@ -463,39 +509,42 @@ def main():
     if pidfile:
         with open(pidfile, "wb") as fp: fp.write(str(os.getpid()) + "\n")
     
-    errors = 0
-    while 1:
-        try:
-            user = api.User(
-                phpsessid=(config['phpsessid'] if config['phpsessid'] else None),
-                security_ls_key=(config['security_ls_key'] if config['security_ls_key'] else None),
-                key=(config['key'] if config['key'] else None),
-                login=(config['username'] if config['username'] else None),
-                passwd=(config['password'] if config['password'] else None),
-            )
-            if config.get('timeout'): user.timeout = int(config['timeout'])
-            if not user.phpsessid:
-                anon = user
-            else:
-                anon = api.User()
-                if config.get('timeout'): anon.timeout = int(config['timeout'])
-                console.stdprint("Logined as", user.username)
-            break
-        except Exception as exc:
-            if isinstance(exc, api.TabunError):
-                console.stdprint("init error:", str(exc))
-            else:
-                traceback.print_exc()
-            errors += 1
-            if errors % 3 == 0: time.sleep(60)
-            else: time.sleep(5)
-    
-    call_handlers("set_user", user, anon)
-    
     try:
+        call_handlers("loaded")
+
+        errors = 0
         while 1:
             try:
-                go()
+                user = api.User(
+                    phpsessid=(config['phpsessid'] if config['phpsessid'] else None),
+                    security_ls_key=(config['security_ls_key'] if config['security_ls_key'] else None),
+                    key=(config['key'] if config['key'] else None),
+                    login=(config['username'] if config['username'] else None),
+                    passwd=(config['password'] if config['password'] else None),
+                )
+                if config.get('timeout'): user.timeout = int(config['timeout'])
+                if not user.phpsessid:
+                    anon = user
+                else:
+                    anon = api.User()
+                    if config.get('timeout'): anon.timeout = int(config['timeout'])
+                    console.stdprint("Logined as", user.username)
+                break
+            except Exception as exc:
+                if isinstance(exc, api.TabunError):
+                    console.stdprint("init error:", str(exc))
+                else:
+                    traceback.print_exc()
+                errors += 1
+                if errors % 3 == 0: time.sleep(60)
+                else: time.sleep(5)
+
+        call_handlers("set_user", user, anon)
+
+        while 1:
+            try:
+                try: go()
+                finally: db.commit()
                 time.sleep(sleep_time)
             except KeyboardInterrupt: raise
             except:
