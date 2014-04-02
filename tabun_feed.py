@@ -411,9 +411,11 @@ def go():
             console.set("get_tic", " r " + str(r))
     r += 1
     
-    if user.talk_unread > old_unread:
-        call_handlers("talk_unread")
+    tmp = old_unread
     old_unread = user.talk_unread
+    if user.talk_unread > tmp:
+        call_handlers("talk_unread")
+    del tmp
     
     relogin = False
     call_handlers("post_load", data)
