@@ -23,7 +23,7 @@ config = {
     "key":"",
     "username": "",
     "password": "",
-    "get_comments_max_pages": "2",
+    "get_comments_max_pages": "0",
 
 }
 
@@ -494,7 +494,8 @@ def go():
         except KeyboardInterrupt: raise
         except:
             traceback.print_exc()
-    db.commit()
+        finally:
+            db.commit()
 
 def main():
     global user, anon, debug
