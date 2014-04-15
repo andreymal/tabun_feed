@@ -63,13 +63,14 @@ def stories_thread():
     err = 0
     while 1:
         try:
-            cset('n', req=True)
-            stories = user.get_new()
-            cset(req=False)
-            quit.wait(5)
-            if quit.isSet(): break
-            cset('u', req=True)
-            try: upd_stories = user.get_updates()
+            try:
+                cset('n', req=True)
+                stories = user.get_new()
+                cset(req=False)
+                quit.wait(5)
+                if quit.isSet(): break
+                cset('u', req=True)
+                upd_stories = user.get_updates()
             except sapi.StoriesError as exc:
                 cset(req=False)
                 if not errored: console.stdprint("Stories error:", exc)
@@ -83,41 +84,39 @@ def stories_thread():
                 console.stdprint("Stories alive")
                 errored = False
             
-            updated = []
+            ###
             
+            new = []
             for ustory in upd_stories:
                 if ustory[0] == last_upd_id and ustory[1] == last_upd_chapter: break
-                if ustory[0] in updated: continue
-                backup_story(user.get_story(ustory[0]))
-                if quit.isSet(): break
-                updated.append(ustory[0])
-                quit.wait(10)
+                if not ustory[0] in new: new.append(ustory[0])
+            
+            for story in stories:
+                if story.story_id <= last_story: break
+                if not story.story_id in new: new.append(story.story_id)
+            
+            new.sort()
+            if quit.isSet(): break
+            
+            for story_id in new:
+                try:
+                    cset(story.story_id, req=True)
+                    backup_story(user.get_story(story_id))
+                    cset(req=False)
+                    quit.wait(10)
+                except Exception as exc:
+                    if isinstance(exc, sapi.StoriesError): console.stdprint("stories error on story %s:"%str(story_id), exc)
+                    else: traceback.print_exc()
+                    console.stdprint(story_id, "not backuped")
+                    quit.wait(10)
                 if quit.isSet(): break
             
             last_upd_id, last_upd_chapter = upd_stories[0]
             tabun_feed.set_db_last('stories_upd_id', last_upd_id)
             tabun_feed.set_db_last('stories_upd_chapter', last_upd_chapter)
             
-            if quit.isSet(): break
-            stories.sort(key=lambda x:-x.story_id)
-            for story in stories:
-                if story.story_id in updated: continue
-                if story.story_id <= last_story: break
-                try:
-                    cset(story.story_id, req=True)
-                    try: backup_story(user.get_story(story.story_id))
-                    except MySQLdb.OperationalError as e:
-                        if e.args[0] not in (2006,): raise
-                        mysql_connect()
-                        backup_story(user.get_story(story.story_id))
-                    cset(req=False)
-                    quit.wait(10)
-                except:
-                    traceback.print_exc()
-                    console.stdprint(story.story_id, "not backuped")
-                    quit.wait(10)
-                if quit.isSet(): break
             last_story = stories[0].story_id
+
         except sapi.StoriesError as exc:
             console.stdprint("stories error:", exc)
             err += 1
@@ -137,9 +136,19 @@ def backup_story(story):
     if story.chapters:
         # cool story, bro
         chapters = []
+        inc = 0
         for c in xrange(1, len(story.chapters) + 1):
-            cset(str(story.story_id) + '/' + str(c), req=True)
-            chapters.append((story.chapters[c-1].encode("utf-8"), user.get_chapter(story.story_id, c)))
+            cset(str(story.story_id) + '/' + str(c+inc), req=True)
+            j = 10
+            while j > 0:
+                j -= 1
+                try:
+                    chapters.append((story.chapters[c-1].encode("utf-8"), user.get_chapter(story.story_id, c+inc)))
+                    break
+                except sapi.StoriesError as exc:
+                    if exc.code != 404: raise
+                    console.stdprint("Stories warning:",str(story.story_id) + '/' + str(c+inc), '— 404 Not Found!')
+                    inc += 1
             cset(req=False)
             quit.wait(6)
             if quit.isSet(): return
@@ -153,7 +162,11 @@ def backup_story(story):
             chapter = chapters[c]
             db.execute("replace into stories_chapters values(%s, %s, %s, %s)", (story.story_id, c+1, chapter[0], lxml.etree.tostring(chapter[1], method="html", encoding="utf-8").replace("&#13;", ""),) )
         
+        db.execute("update stories_chapters set name = concat(%s, name) where story_id=%s and chapter_id>%s", ("[удалено] ", story.story_id, len(chapters),))
+        
         db.execute("replace into stories_authors values(%s, %s)", (story.author_id, story.author.encode("utf-8")))
+        db.execute("delete from stories_text_characters where story_id=%s", (story.story_id,))
+        db.execute("delete from stories_text_categories where story_id=%s", (story.story_id,))
         for char in story.characters.items():
             db.execute("replace into stories_characters values(%s, %s)", (char[0], char[1].encode("utf-8")))
             db.execute("replace into stories_text_characters values(%s, %s)", (story.story_id, char[0]))

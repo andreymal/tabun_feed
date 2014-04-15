@@ -25,7 +25,7 @@ class VKApp:
         self.jd = json.JSONDecoder()
     
     def api(self, method_name, args):
-        return vk_api.api(method_name, args, token=self.access_token)
+        return vk_api.api(method_name, args, token=self.access_token, timeout=2)
 
 def init_tabun_plugin(tabun_feed):
     global VK

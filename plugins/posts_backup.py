@@ -43,8 +43,8 @@ def backup_post(post, full_post=None):
     db.execute("replace into tabun_backup values(%s, %s, %s)", (post.post_id, time.mktime(post.time), post2json(post)) )
     
     #disabled in robots.txt
-    #try:urllib2.urlopen("http://web.archive.org/save/http://tabun.everypony.ru/blog/" + ((post.blog+"/") if post.blog else "") + str(post.post_id) + ".html").read()
-    #except IOError as e: console.stdprint("Cannot web.archive.org", post.post_id, e)
+    try:urllib2.urlopen("http://web.archive.org/save/http://tabun.everypony.ru/blog/" + ((post.blog+"/") if post.blog else "") + str(post.post_id) + ".html").read()
+    except IOError as e: console.stdprint("Cannot web.archive.org", post.post_id, e)
     
 def mysql_connect():
     global db

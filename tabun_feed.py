@@ -554,6 +554,8 @@ def main():
                 traceback.print_exc()
                 time.sleep(sleep_time)
     finally:
+        try: db.commit()
+        except: traceback.print_exc()
         try:
             quit_event.set()
             call_handlers("quit")
