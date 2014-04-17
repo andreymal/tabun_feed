@@ -5,6 +5,7 @@ import time
 
 tabun_feed = None
 last_list = None
+console = None
 anon = None
 db = None
 i = 14

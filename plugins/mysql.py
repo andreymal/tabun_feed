@@ -7,6 +7,13 @@ from threading import Lock, RLock
 db = None
 tabun_feed = None
 
+def e(x):
+    """Экранирует строку для запроса MySQL."""
+    if isinstance(x, (int, long, float)):
+        return str(x)
+    if isinstance(x,unicode): return '"' + MySQLdb.escape_string(x.encode('utf-8')) + '"'
+    else: return '"' + MySQLdb.escape_string(x) + '"'
+
 class DB:
     def __init__(self, user, password, database):
         self.user = str(user)
@@ -33,7 +40,7 @@ class DB:
         return n
             
     def execute(self, s, args=[]):
-        if not isinstance(s,(str,unicode)):raise DbExc("Query is not string")
+        if not isinstance(s,(str,unicode)):raise ValueError("Query is not string")
         if __debug__:
             if self.debug:
                 try: tabun_feed.console.stdprint('  MySQL QUERY:',s)
@@ -50,7 +57,7 @@ class DB:
 
     def execute_in(self, s, in_args, args=[], binary=False):
         # select * from sometable where somecolumn = %s and somecolumn2 in (%s)
-        if not isinstance(s,(str,unicode)):raise DbExc("Query is not string")
+        if not isinstance(s,(str,unicode)):raise ValueError("Query is not string")
         if isinstance(s, unicode): s = s.encode('utf-8')
         s = s.replace( "(%s)", "("+("binary " if binary else "") + (", "+"binary " if binary else ", ").join(map(e, in_args)) + ")" )
         return self.execute(s, args)

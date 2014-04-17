@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 import time
-import vk_api as VK
 
 code = r"""var count = -1;
 var users = [];
@@ -13,6 +12,9 @@ while(count == -1 || users.length < count){
     users = users + API.users.get( {"user_ids": members.users, "fields": "online"} );
 }
 return users;"""
+
+tabun_feed = None
+VK = None
 
 req = 14
 def load(urls):

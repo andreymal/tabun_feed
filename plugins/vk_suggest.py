@@ -1,11 +1,11 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 
-import time
-from threading import Thread, Event
-import vk_api as VK
+from threading import Thread
 
+tabun_feed = None
 notifies = None
+VK = None
 
 def suggest_thread():
     tabun_feed.console.stdprint("Suggest thread started")

@@ -5,8 +5,9 @@ import time
 import traceback
 import lxml.etree
 import stories_api as sapi
-from threading import RLock, Thread
+from threading import Thread
 
+tabun_feed = None
 user = None
 db = None
 console = None
@@ -116,7 +117,6 @@ def stories_thread():
             tabun_feed.set_db_last('stories_upd_chapter', last_upd_chapter)
             
             last_story = stories[0].story_id
-
         except sapi.StoriesError as exc:
             console.stdprint("stories error:", exc)
             err += 1
