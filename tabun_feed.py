@@ -195,7 +195,9 @@ def request_full_posts():
 
 def notify(data):
     if isinstance(data, unicode): data = data.encode("utf-8")
-    if not config.get("notify_group"): return
+    if not config.get("notify_group"):
+        console.stdprint(data)
+        return
     data = config["notify_group"] + ":" + data
     os.system('notify "'+data.replace('"','\\"').replace("`","'") + '"')
   
@@ -381,7 +383,7 @@ def go():
             data[urls[i]] = raw_data
             
             if urls[i] == '/comments/':
-                comments.extend(user.get_comments(raw_data=raw_data))
+                comments.extend(user.get_comments(raw_data=raw_data).values())
                 comments.sort(key=lambda x:-x.comment_id)
                 
                 cpage = 1
@@ -391,7 +393,7 @@ def go():
                     console.stdprint("Load comments, page", cpage)
                     raw_data2 = user.urlopen("/comments/page" + str(cpage) + "/").read()
                     time.sleep(1)
-                    comments.extend(user.get_comments(raw_data=raw_data2))
+                    comments.extend(user.get_comments(raw_data=raw_data2).values())
                     comments.sort(key=lambda x:-x.comment_id)
             else:
                 ps = user.get_posts(urls[i], raw_data=raw_data)
