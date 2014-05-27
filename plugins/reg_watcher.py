@@ -24,8 +24,10 @@ def load(urls):
             console.stdprint(time.strftime("%H:%M:%S", ppl.registered), "New user", people.username)
             last_list.append(people.username)
             last_list = last_list[-15:]
+            try: bd = time.mktime(ppl.birthday) if ppl.birthday else None
+            except: bd = None; console.stdprint("Incorrect birthday", ppl.birthday)
             db.execute("replace into tabun_people values(%s, %s, %s, %s)", (ppl.username, time.mktime(ppl.registered),
-                time.mktime(ppl.birthday) if ppl.birthday else None, time.strftime('%d.%m.%Y', ppl.birthday) if ppl.birthday else None,))
+                bd, time.strftime('%d.%m.%Y', ppl.birthday) if bd else None,))
     
 def mysql_connect():
     global db

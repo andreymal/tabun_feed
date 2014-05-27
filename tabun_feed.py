@@ -459,7 +459,7 @@ def go():
                 db.execute("update lasts set value=? where type='comment_id'", (last_comment,) )
                 error = call_handlers("comment", comment, blogs_list)
                 if error:
-                    call_handlers("comment_error", blog)
+                    call_handlers("comment_error", comment)
             except KeyboardInterrupt: raise
             except:
                 traceback.print_exc()
