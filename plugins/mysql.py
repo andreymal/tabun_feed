@@ -1,6 +1,7 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 
+import time
 import MySQLdb
 from threading import Lock, RLock
 
@@ -39,7 +40,7 @@ class DB:
         self.counter_lock.release()
         return n
             
-    def execute(self, s, args=[]):
+    def execute(self, s, args=[], tries=15):
         if not isinstance(s,(str,unicode)):raise ValueError("Query is not string")
         if __debug__:
             if self.debug:
@@ -47,8 +48,16 @@ class DB:
                 except: tabun_feed.console.srdprint('  MySQL QUERY.')
         
         with self.lock:
-            cursor = self.db_conn.cursor()
-            cursor.execute(s, args)
+            for i in xrange(1, tries+1):
+                try:
+                    cursor = self.db_conn.cursor()
+                    cursor.execute(s, args)
+                    break
+                except MySQLdb.OperationalError as exc:
+                    if i > tries or exc.args[0] not in (2013, 2002, 2006): raise
+                    time.sleep(0.3)
+                    self.connect()
+
             if self.counter is not None:
                 if isinstance(self.counter, list):
                     self.counter.append(cursor._last_executed)
