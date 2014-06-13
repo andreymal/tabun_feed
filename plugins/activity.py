@@ -40,9 +40,10 @@ def load_activity(data=None):
             new.insert(0, act)
 
     tabun_feed.console.set('get_tic', old_tic)
-    last_act = new[-1]
 
-    tabun_feed.call_handlers("activity", new)
+    if new:
+        last_act = new[-1]
+        tabun_feed.call_handlers("activity", new)
 
 def init_tabun_plugin(tf):
     global tabun_feed
