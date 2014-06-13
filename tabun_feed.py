@@ -11,7 +11,7 @@ import traceback
 import tabun_api as api
 from threading import RLock, Event
 
-api.http_headers["user-agent"] = 'tabun_feed/0.5; Linux/2.6'
+api.http_headers["user-agent"] = 'tabun_feed/0.5.1; Linux/2.6'
 
 config = {
     "phpsessid": "",
