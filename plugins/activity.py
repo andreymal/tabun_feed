@@ -10,12 +10,19 @@ user = None
 last_act = None
 
 def load_activity(data=None):
+    old_tic = tabun_feed.console.get('get_tic')[0]
+    try:
+        go_activity(old_tic)
+    except:
+        tabun_feed.console.set('get_tic', old_tic)
+        raise
+
+def go_activity(old_tic):
     global last_act
     full = False
     new = []
     last_id = None
     old_last_id = tabun_feed.get_db_last('activity_id')
-    old_tic = tabun_feed.console.get('get_tic')[0]
     
     i = 0
     while not full:
@@ -38,6 +45,9 @@ def load_activity(data=None):
                 full = True
                 break
             new.insert(0, act)
+
+        if last_id <= old_last_id:
+            full = True
 
     tabun_feed.console.set('get_tic', old_tic)
 
