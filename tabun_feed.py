@@ -24,6 +24,7 @@ config = {
     "username": "",
     "password": "",
     "get_comments_max_pages": "0",
+    "get_comments_min_pages": "1",
 
 }
 
@@ -59,117 +60,261 @@ class ThreadDB:
                 console.stdprint("commit break!")
                 raise 
             
-class Console:
-    def __init__(self):
-        self.keys = []
+class Console(object):
+    replacements = (
+        ('K', '\x1b[01;30m'),
+        ('R', '\x1b[01;31m'),
+        ('G', '\x1b[01;32m'),
+        ('Y', '\x1b[01;33m'),
+        ('B', '\x1b[01;34m'),
+        ('M', '\x1b[01;35m'),
+        ('C', '\x1b[01;36m'),
+        ('W', '\x1b[01;37m'),
+        ('D', '\x1b[01;39m'),
+        ('k', '\x1b[01;40m'),
+        ('r', '\x1b[01;41m'),
+        ('g', '\x1b[01;42m'),
+        ('y', '\x1b[01;43m'),
+        ('b', '\x1b[01;44m'),
+        ('m', '\x1b[01;45m'),
+        ('c', '\x1b[01;46m'),
+        ('w', '\x1b[01;47m'),
+        ('d', '\x1b[01;49m'),
+        ('0', '\x1b[0m')
+    )
+    
+    def __init__(self, colored=True, simple_clear=False):
+        self.colored = bool(colored)
+        self.simple_clear = bool(simple_clear)
+
+        self.order = []
         self.data = {}
         self.last_len = 0
         self.lock = RLock()
-        self.expander = None
+        self.expander_key = None
+        self.noflush = False
 
-    def set(self, key, value, position=-1):
+    def __enter__(self):
+        self.lock.acquire()
+        self.noflush = True
+
+    def __exit__(self, typ, value, tb):
+        self.noflush = False
+        self.print_all()
+        self.lock.release()
+
+    def set(self, key, value, position=-1, colored=False):
+        key = key.decode("utf-8", "replace") if isinstance(key, str) else unicode(key)
+        value = value.decode("utf-8", "replace") if isinstance(value, str) else unicode(value)
+        position = int(position)
+
         with self.lock:
-            if isinstance(key, unicode): key = key.encode("utf-8")
-            else: key = str(key)
-            if isinstance(value, str): value = value.decode("utf-8", "replace")
-            else: value = unicode(value)
-            position = int(position)
-            
             data = self.data.get(key)
             if not data:
-                data = [None, 0]
-                if position >= 0: self.keys.insert(position, key)
-                else: self.keys.append(key)
-            data[1] = max(data[1], len(value))
+                # [unicode data, raw (colored) unicode data, output len (without
+                # escape sequences), is colored]
+                data = [None, None, 0, False]
+                if position >= 0:
+                    self.order.insert(position, key)
+                else:
+                    self.order.append(key)
+
             data[0] = value
+            data[1] = None
+            data[3] = bool(colored)
+
             self.data[key] = data
+
+            if not self.noflush:
+                self.print_all()
+
+    def format_field(self, key, setlen=None):
+        with self.lock:
+            data = self.data.get(key)
+            if not data:
+                return u"", 0
+
+            data[1] = data[0].\
+                replace(u'\x1b', u'^[').\
+                replace(u'\x00', u'').\
+                replace(u'\r', u' ').replace(u'\n', u' ')
+            length = len(data[1])
             
-            self.print_all()
-    
+            if not data[3]:  # not colored
+                if setlen is not None:
+                    if setlen < length:
+                        data[1] = data[1][:setlen]
+                    else:
+                        data[1] = data[1] + u" " * (setlen - length)
+                    length = setlen
+                
+                elif data[2] > length:
+                    data[1] = data[1] + u" " * (setlen - length)
+                    length = len(data[1])
+            
+            else: # colored
+                rawdata = u""
+                length = 0
+
+                i = -2
+                while True:
+                    ni = data[1].find('%', i + 2, len(data[1]) - 1)
+                    if ni < 0:
+                        break
+
+                    part = data[1][i + 2:ni + 2]  # ignore if key is unknown
+                    partesc = u""
+                    i = ni
+                    
+                    if data[1][i+1] == '%':
+                        part = part[:-1]  # %% -> %
+                    else:
+                        for key, esc in self.replacements:
+                            if data[1][i+1] == key:
+                                part = part[:-2]  # crop key
+                                partesc = esc if self.colored else ""
+                                break
+
+                    if setlen is not None and length + len(part) > setlen:
+                        part = part[:-(length + len(part) - setlen)]
+                        partesc = ""
+
+                    rawdata += part + partesc
+                    length += len(part)
+                    if setlen is not None and length >= setlen:
+                        break
+
+                if i >= 0 and (setlen is None or length < setlen) and i < len(data[1]) - 2:
+                    part = data[1][i + 2:]
+                    if setlen is not None and length + len(part) > setlen:
+                        part = part[:-(length + len(part) - setlen)]
+                    rawdata += part
+                    length += len(part)
+
+                if setlen is not None and setlen > length:
+                    rawdata = rawdata + u" " * (setlen - length)
+                    length = setlen
+                elif data[2] > length:
+                    rawdata = rawdata + u" " * (data[2] - length)
+                    length += data[2] - length
+
+                data[1] = rawdata + '\x1b[0m'
+
+            data[2] = length
+            return data[1], data[2]
+
     def get(self, key):
-        return self.data.get(key)
-    
+        return self.data.get(key)[0]
+
     def pop(self, key):
         with self.lock:
-            if not key in self.keys: return
+            if key not in self.order:
+                return False
             self.data.pop(key)
-            self.keys.remove(key)
-            self.print_all()
-    
+            self.order.remove(key)
+            if not self.noflush:
+                self.print_all()
+            return True
+
     def clear(self):
         with self.lock:
-            #sys.stdout.write("\r" + " "*self.last_len + "\r")
-            sys.stdout.write("\r\x1b[2K")
-            
+            if self.simple_clear:
+                sys.stdout.write("\r" + " "*self.last_len + "\r")
+            else:
+                sys.stdout.write("\r\x1b[2K")
+
     def stdprint(self, *args, **kwargs):
         with self.lock:
             self.clear()
-            for x in args: print x,
+            for x in args:
+                print x,
             if kwargs.get("end", True):
                 print
-                self.print_all()
-            else: sys.stdout.flush()
-    
+                if not self.noflush:
+                    self.print_all()
+            else:
+                sys.stdout.flush()
+
     def print_all(self):
         with self.lock:
-            begin = ""
-            center = ""
-            end = ""
+            begin = u""
+            center = u""
+            end = u""
             self.last_len = 0
-            for key in self.keys:
-                if key == self.expander:
-                    end = " | "
+
+            for key in self.order:
+                if key == self.expander_key:
+                    end = u" | "
+                    self.last_len += 3
                     continue
-                data = self.data[key]
-                tmp = data[0]
-                if len(data[0]) < data[1]:
-                    tmp += " " * (data[1] - len(data[0]))
-                tmp += " | "
-                if end: end += tmp
-                else: begin += tmp
-            exp = self.data.get(self.expander)
+
+                raw, rawlen = self.data[key][1:3]
+                if raw is None:
+                    raw, rawlen = self.format_field(key)
+
+                raw += u" | "
+                if end:
+                    end += raw
+                else:
+                    begin += raw
+
+                self.last_len += rawlen + 3
+
+            exp = self.data.get(self.expander_key)
             if exp:
-                w, h = self.get_term_size()
-                free = w - len(begin) - len(end) - 1
+                # raw, rawlen = exp[1:2]
+                # if raw is None:
+                #     raw, rawlen = self.format_field(self.expander_key)
+                # center = raw
+                w = self.get_term_size()[0]
+                free = w - self.last_len - 1
+
                 if free > 0:
-                    if free > len(exp[0]):
-                        center = exp[0] + u" " * (free - len(exp[0]))
-                    else:
-                        center = exp[0][:free]
-            #sys.stdout.write("\r" + " "*self.last_len + "\r")
-            sys.stdout.write("\r\x1b[2K")
-            out = begin + center + end
-            print out,
-            self.last_len += len(out)
+                    raw, rawlen = self.format_field(self.expander_key, setlen=free)
+                    center = raw
+                    self.last_len += rawlen
+
+                # if free > 0:
+                #     if free > len(rawlen):
+                #         center = raw + u" " * (free - len(text))
+                #     else:
+                #         center = text[:free]
+
+            self.clear()
+            print begin + center + end,
             sys.stdout.flush()
 
     def bprint(self, *args):
         with self.lock:
-            for x in args: print x,
+            for x in args:
+                print x,
             sys.stdout.write("\r")
             sys.stdout.flush()
 
     def rprint(self, *args):
         with self.lock:
             sys.stdout.write("\r")
-            for x in args: print x,
+            for x in args:
+                print x,
             sys.stdout.flush()
 
     def nprint(self, *args):
         with self.lock:
-            for x in args: print x,
+            for x in args:
+                print x,
             sys.stdout.flush()
 
     def set_expanded(self, key):
-        self.expander = key
+        self.expander_key = key
 
-    def get_term_size(self):
-        env = os.environ
+    @staticmethod
+    def get_term_size():
         def ioctl_GWINSZ(fd):
             try:
-                import fcntl, termios, struct
-                cr = struct.unpack('hh', fcntl.ioctl(fd, termios.TIOCGWINSZ,
-            '1234'))
+                import fcntl
+                import termios
+                import struct
+                cr = struct.unpack('hh', fcntl.ioctl(fd, termios.TIOCGWINSZ, '1234'))
             except:
                 return
             return cr
@@ -182,7 +327,7 @@ class Console:
             except:
                 pass
         if not cr:
-            cr = (env.get('LINES', 25), env.get('COLUMNS', 80))
+            cr = (os.environ.get('LINES', 25), os.environ.get('COLUMNS', 80))
         return int(cr[1]), int(cr[0])
 
 console = Console()
@@ -382,15 +527,18 @@ def go():
                     return go()
             data[urls[i]] = raw_data
             
-            if urls[i] == '/comments/':
+            if urls[i] == '/comments/': # TODO: переделать по-нормаляьному
                 comments.extend(user.get_comments(raw_data=raw_data).values())
                 comments.sort(key=lambda x:-x.comment_id)
                 
                 cpage = 1
                 cpage_max = int(config.get("get_comments_max_pages", 0))
-                while (not cpage_max or cpage < cpage_max) and last_comment > 0 and comments and comments[-1].comment_id > last_comment:
+                cpage_min = int(config.get("get_comments_min_pages", 1))
+                while cpage < cpage_min or ((not cpage_max or cpage < cpage_max) and last_comment > 0 and comments and comments[-1].comment_id > last_comment):
                     cpage += 1
-                    console.stdprint("Load comments, page", cpage)
+                    if cpage > cpage_min:
+                        console.stdprint("Load comments, page", cpage)
+                    console.set("get_tic", " r" + (":" if (i+cpage-1)%2==0 else ".") + str(r), position=0)
                     raw_data2 = user.urlopen("/comments/page" + str(cpage) + "/").read()
                     time.sleep(1)
                     comments.extend(user.get_comments(raw_data=raw_data2).values())
@@ -455,6 +603,8 @@ def go():
         new_comments.reverse()
         for comment in new_comments:
             try:
+                if comment.comment_id == last_comment: # фильтруем дубликаты
+                    continue
                 last_comment = comment.comment_id
                 db.execute("update lasts set value=? where type='comment_id'", (last_comment,) )
                 error = call_handlers("comment", comment, blogs_list)

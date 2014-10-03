@@ -8,13 +8,13 @@ last_list = None
 console = None
 anon = None
 db = None
-i = 14
+i = 4
 
 def load(urls):
     global i, last_list
     if not anon: return
     i += 1
-    if i < 15: return
+    if i < 5: return
     i = 0
     peoples = anon.get_people_list(url='/people/new/')
     peoples.reverse()
@@ -28,6 +28,8 @@ def load(urls):
             except: bd = None; console.stdprint("Incorrect birthday", ppl.birthday)
             db.execute("replace into tabun_people values(%s, %s, %s, %s)", (ppl.username, time.mktime(ppl.registered),
                 bd, time.strftime('%d.%m.%Y', ppl.birthday) if bd else None,))
+            tabun_feed.call_handlers("new_user", ppl)
+            time.sleep(2)
     
 def mysql_connect():
     global db
@@ -54,7 +56,8 @@ def init_tabun_plugin(tf):
     
     last_list = map(lambda x:str(x[0]), db.execute("select username from tabun_people order by time desc limit 0,15").fetchall())
     last_list.reverse()
-    
+    #last_list = last_list[:-1]
+
     tabun_feed.add_handler("load", load)
     tabun_feed.add_handler("set_user", start)
 
