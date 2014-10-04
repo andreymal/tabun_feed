@@ -100,7 +100,10 @@ class Console(object):
 
     def __exit__(self, typ, value, tb):
         self.noflush = False
-        self.print_all()
+        try:
+            self.print_all()
+        except:
+            traceback.print_exc()
         self.lock.release()
 
     def set(self, key, value, position=-1, colored=False):
@@ -126,7 +129,10 @@ class Console(object):
             self.data[key] = data
 
             if not self.noflush:
-                self.print_all()
+                try:
+                    self.print_all()
+                except:
+                    traceback.print_exc()
 
     def format_field(self, key, setlen=None):
         with self.lock:
@@ -149,7 +155,7 @@ class Console(object):
                     length = setlen
                 
                 elif data[2] > length:
-                    data[1] = data[1] + u" " * (setlen - length)
+                    data[1] = data[1] + u" " * (len(data[1]) - length)
                     length = len(data[1])
             
             else: # colored
@@ -213,7 +219,10 @@ class Console(object):
             self.data.pop(key)
             self.order.remove(key)
             if not self.noflush:
-                self.print_all()
+                try:
+                    self.print_all()
+                except:
+                    traceback.print_exc()
             return True
 
     def clear(self):
@@ -231,7 +240,10 @@ class Console(object):
             if kwargs.get("end", True):
                 print
                 if not self.noflush:
-                    self.print_all()
+                    try:
+                        self.print_all()
+                    except:
+                        traceback.print_exc()
             else:
                 sys.stdout.flush()
 
@@ -527,7 +539,7 @@ def go():
                     return go()
             data[urls[i]] = raw_data
             
-            if urls[i] == '/comments/': # TODO: переделать по-нормаляьному
+            if urls[i] == '/comments/': # TODO: переделать по-нормальному
                 comments.extend(user.get_comments(raw_data=raw_data).values())
                 comments.sort(key=lambda x:-x.comment_id)
                 
