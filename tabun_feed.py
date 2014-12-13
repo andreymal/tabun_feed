@@ -586,22 +586,25 @@ def go():
         # блоги
         blogs_list.sort(lambda a,b:cmp(b.blog_id, a.blog_id)) # reversed list
         new_blogs = []
-        
-        for blog in blogs_list:
-            if blog.blog_id <= last_bid: break
-            new_blogs.append(blog)
-        
-        new_blogs.reverse()
-        for blog in new_blogs:
-            try:
-                last_bid = blog.blog_id
-                db.execute("update lasts set value=? where type='blog'", (last_bid,) )
-                error = call_handlers("blog", blog)
-                if error:
-                    call_handlers("blog_error", blog)
-            except KeyboardInterrupt: raise
-            except:
-                traceback.print_exc()
+
+        if blogs_list and not last_bid:
+            db.execute("update lasts set value=? where type='blog'", (blogs_list[0].blog_id,) )
+        else:
+            for blog in blogs_list:
+                if blog.blog_id <= last_bid: break
+                new_blogs.append(blog)
+            
+            new_blogs.reverse()
+            for blog in new_blogs:
+                try:
+                    last_bid = blog.blog_id
+                    db.execute("update lasts set value=? where type='blog'", (last_bid,) )
+                    error = call_handlers("blog", blog)
+                    if error:
+                        call_handlers("blog_error", blog)
+                except KeyboardInterrupt: raise
+                except:
+                    traceback.print_exc()
         db.commit()
 
     if comments:
