@@ -529,7 +529,7 @@ def go():
     
     updated = False
     for i in range(len(urls)):
-        console.set("get_tic", " r" + (":" if i%2==0 else ".") + str(r), position=0)
+        console.set("get_tic", " r" + (":" if i % 2 == 0 else ".") + str(r), position=0)
         try:
             raw_data = user.urlopen(urls[i]).read()
             if not updated:
@@ -550,11 +550,11 @@ def go():
                     cpage += 1
                     if cpage > cpage_min:
                         console.stdprint("Load comments, page", cpage)
-                    console.set("get_tic", " r" + (":" if (i+cpage-1)%2==0 else ".") + str(r), position=0)
+                    console.set("get_tic", " r" + (":" if (i + cpage - 1) % 2 == 0 else ".") + str(r), position=0)
                     raw_data2 = user.urlopen("/comments/page" + str(cpage) + "/").read()
                     time.sleep(1)
                     comments.extend(user.get_comments(raw_data=raw_data2).values())
-                    comments.sort(key=lambda x:-x.comment_id)
+                    comments.sort(key=lambda x: -x.comment_id)
             else:
                 ps = user.get_posts(urls[i], raw_data=raw_data)
                 posts.extend(ps)
@@ -564,13 +564,13 @@ def go():
         
         except KeyboardInterrupt: raise
         except api.TabunError as exc:
-            console.set("get_tic", " r " + str(r) + " " + str(exc))
+            console.set("get_tic", " r-" + str(r) + " " + str(exc))
         except socket.timeout:
-            console.set("get_tic", " r " + str(r) + " timeout")
+            console.set("get_tic", " r-" + str(r) + " timeout")
         except socket.error:
-            console.set("get_tic", " r " + str(r) + " sock err")
+            console.set("get_tic", " r-" + str(r) + " sock err")
         else:
-            console.set("get_tic", " r " + str(r))
+            console.set("get_tic", " r-" + str(r))
     r += 1
     
     tmp = old_unread
@@ -664,6 +664,8 @@ def go():
         finally:
             db.commit()
 
+    console.set("get_tic", " r " + str(r - 1))
+
 def main():
     global user, anon, debug
     if "-d" in sys.argv: debug = True
@@ -685,20 +687,33 @@ def main():
         errors = 0
         while 1:
             try:
-                user = api.User(
-                    phpsessid=(config['phpsessid'] if config['phpsessid'] else None),
-                    security_ls_key=(config['security_ls_key'] if config['security_ls_key'] else None),
-                    key=(config['key'] if config['key'] else None),
-                    login=(config['username'] if config['username'] else None),
-                    passwd=(config['password'] if config['password'] else None),
-                )
-                if config.get('timeout'): user.timeout = int(config['timeout'])
-                if not user.phpsessid:
+                user = None
+                if config.get('phpsessid') and config.get('password'):
+                    tmpuser = api.User(phpsessid=config['phpsessid'])
+                    if tmpuser.username:
+                        if config.get('username') and tmpuser.username == config['username']:
+                            console.stdprint('Fast login!')
+                            user = tmpuser
+                    del tmpuser
+
+                if user is None:
+                    user = api.User(
+                        phpsessid=(config['phpsessid'] if config['phpsessid'] else None),
+                        security_ls_key=(config['security_ls_key'] if config['security_ls_key'] else None),
+                        key=(config['key'] if config['key'] else None),
+                        login=(config['username'] if config['username'] else None),
+                        passwd=(config['password'] if config['password'] else None),
+                    )
+                if config.get('timeout'):
+                    user.timeout = int(config['timeout'])
+
+                if not user.username:
                     anon = user
                 else:
-                    anon = api.User()
-                    if config.get('timeout'): anon.timeout = int(config['timeout'])
                     console.stdprint("Logined as", user.username)
+                    anon = api.User()
+                    if config.get('timeout'):
+                        anon.timeout = int(config['timeout'])
                 break
             except Exception as exc:
                 if isinstance(exc, api.TabunError):
@@ -706,16 +721,23 @@ def main():
                 else:
                     traceback.print_exc()
                 errors += 1
-                if errors % 3 == 0: time.sleep(60)
-                else: time.sleep(5)
+                if errors % 3 == 0:
+                    time.sleep(90)
+                else:
+                    time.sleep(15)
 
         call_handlers("set_user", user, anon)
 
         while 1:
             try:
-                try: go()
-                finally: db.commit()
-                time.sleep(sleep_time)
+                try:
+                    go()
+                finally:
+                    db.commit()
+                try:
+                    time.sleep(sleep_time)
+                except KeyboardInterrupt:
+                    break
             except KeyboardInterrupt: raise
             except:
                 traceback.print_exc()
@@ -734,4 +756,4 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        raise#print
+        raise
