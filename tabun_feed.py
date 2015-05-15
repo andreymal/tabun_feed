@@ -11,7 +11,7 @@ import traceback
 import tabun_api as api
 from threading import RLock, Event
 
-api.http_headers["user-agent"] = 'tabun_feed/0.5.1; Linux/2.6'
+api.http_headers["user-agent"] = 'tabun_feed/0.5.2; Linux/2.6'
 
 config = {
     "phpsessid": "",
@@ -86,6 +86,9 @@ class Console(object):
     def __init__(self, colored=True, simple_clear=False):
         self.colored = bool(colored)
         self.simple_clear = bool(simple_clear)
+        self.output_dir = None
+        self.output_fp = None
+        self.output_name = None
 
         self.order = []
         self.data = {}
@@ -105,6 +108,17 @@ class Console(object):
         except:
             traceback.print_exc()
         self.lock.release()
+
+    def set_output_dir(self, output_dir):
+        self.output_dir = os.path.abspath(str(output_dir)) if output_dir else None
+        self.output_fp = None
+        self.output_name = None
+        if self.output_dir:
+            if not os.path.exists(self.output_dir):
+                os.makedirs(self.output_dir)
+            elif not os.path.isdir(self.output_dir):
+                print('%d is not directory, logging is disabled' % self.output_dir)
+                self.output_dir = None
 
     def set(self, key, value, position=-1, colored=False):
         key = key.decode("utf-8", "replace") if isinstance(key, str) else unicode(key)
@@ -228,7 +242,7 @@ class Console(object):
     def clear(self):
         with self.lock:
             if self.simple_clear:
-                sys.stdout.write("\r" + " "*self.last_len + "\r")
+                sys.stdout.write("\r" + " " * self.last_len + "\r")
             else:
                 sys.stdout.write("\r\x1b[2K")
 
@@ -246,6 +260,27 @@ class Console(object):
                         traceback.print_exc()
             else:
                 sys.stdout.flush()
+
+            try:
+                if self.output_dir:
+                    name = time.strftime("%Y-%m-%d.log")
+                    if name != self.output_name:
+                        if self.output_fp:
+                            self.output_fp.close()
+                            self.output_fp = None
+                    if not self.output_fp:
+                        self.output_fp = open(os.path.join(self.output_dir, name), 'ab')
+                        self.output_name = name
+
+                    self.output_fp.write(time.strftime('[%Y-%m-%d %H:%M:%S] '))
+                    self.output_fp.write(' '.join((x.encode('utf-8') if isinstance(x, unicode) else str(x)) for x in args))
+                    self.output_fp.write('\n')
+                    if not self.noflush:
+                        self.output_fp.flush()
+
+            except:
+                traceback.print_exc()
+
 
     def print_all(self):
         with self.lock:
@@ -499,12 +534,15 @@ def go():
     
     if relogin:
         try:
-            user.login(config.get("username", user.username), config["password"])
+            user.login(config["username"], config["password"])
             console.stdprint(time.strftime("%H:%M:%S"), "Relogined as", user.username)
         except api.TabunError as exc:
-            console.stdprint(str(exc))
+            console.stdprint("Cannot relogin: ", str(exc))
+            return
         time.sleep(1)
-    
+
+    console.set("get_tic", " r<" + str(r), position=0)
+
     urls = config['urls'].split(",")
     posts = []
     
@@ -527,14 +565,12 @@ def go():
         except:
             traceback.print_exc()
     
-    updated = False
     for i in range(len(urls)):
-        console.set("get_tic", " r" + (":" if i % 2 == 0 else ".") + str(r), position=0)
+        console.set("get_tic", " r" + (":" if i % 2 == 0 else ".") + str(r))
         try:
             raw_data = user.urlopen(urls[i]).read()
-            if not updated:
-                old_user = user.username
-                if not user.update_userinfo(raw_data) and old_user and not relogin and config.get("password"):
+            if not relogin and config.get("username") and config.get("password"):
+                if not user.update_userinfo(raw_data):
                     relogin = True
                     return go()
             data[urls[i]] = raw_data
@@ -564,13 +600,13 @@ def go():
         
         except KeyboardInterrupt: raise
         except api.TabunError as exc:
-            console.set("get_tic", " r-" + str(r) + " " + str(exc))
+            console.set("get_tic", " r>" + str(r) + " " + str(exc))
         except socket.timeout:
-            console.set("get_tic", " r-" + str(r) + " timeout")
+            console.set("get_tic", " r>" + str(r) + " timeout")
         except socket.error:
-            console.set("get_tic", " r-" + str(r) + " sock err")
+            console.set("get_tic", " r>" + str(r) + " sock err")
         else:
-            console.set("get_tic", " r-" + str(r))
+            console.set("get_tic", " r>" + str(r))
     r += 1
     
     tmp = old_unread
@@ -668,8 +704,10 @@ def go():
 
 def main():
     global user, anon, debug
-    if "-d" in sys.argv: debug = True
+    if "-d" in sys.argv:
+        debug = True
     load_config()
+    console.set_output_dir(config.get('logs_directory'))
     
     sleep_time = int(config["sleep_time"])
     

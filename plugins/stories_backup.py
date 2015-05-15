@@ -111,10 +111,11 @@ def stories_thread():
                     console.stdprint(story_id, "not backuped")
                     quit.wait(10)
                 if quit.isSet(): break
-            
-            last_upd_id, last_upd_chapter = upd_stories[0]
-            tabun_feed.set_db_last('stories_upd_id', last_upd_id)
-            tabun_feed.set_db_last('stories_upd_chapter', last_upd_chapter)
+
+            if upd_stories:
+                last_upd_id, last_upd_chapter = upd_stories[0]
+                tabun_feed.set_db_last('stories_upd_id', last_upd_id)
+                tabun_feed.set_db_last('stories_upd_chapter', last_upd_chapter)
             
             last_story = stories[0].story_id
         except sapi.StoriesError as exc:
