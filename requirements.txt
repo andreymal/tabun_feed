@@ -1,0 +1,1 @@
+git+https://github.com/andreymal/tabun_api.git#egg=tabun_api[imageutils]
