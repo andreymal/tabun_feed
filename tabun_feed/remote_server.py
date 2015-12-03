@@ -5,7 +5,6 @@ from __future__ import unicode_literals
 
 import os
 import time
-import select
 import socket
 import logging
 import threading
@@ -43,7 +42,6 @@ class RemoteClient(remote_connection.RemoteConnection):
 
     def __init__(self, *args, **kwargs):
         super(RemoteClient, self).__init__(*args, **kwargs)
-        self.server = None
         self.authorized = False
         self.subscriptions = []
 
@@ -56,26 +54,20 @@ class RemoteClient(remote_connection.RemoteConnection):
 
     def close(self):
         super(RemoteClient, self).close()
-        self.server = None
+        server.client_onclose(self)
 
     def process_client(self):
-        packets = []
-        while True:
-            packet = self.get()
-            if packet is None:
-                packet = self.wait(one_pass=True)
-                if packet is not None:
-                    packets.append(packet)
-                break
-            else:
-                packets.append(packet)
+        try:
+            while not self.closed:
+                packet = self.wait()
+                if packet is None:
+                    break
 
-        for packet in packets:
-            if self.closed:
-                break
-            result = self.process_packet(packet)
-            if result is not None:
-                self.send(result)
+                result = self.process_packet(packet)
+                if result is not None:
+                    self.send(result)
+        except:
+            worker.fail()
 
     def process_packet(self, packet):
         if packet is None:
@@ -200,40 +192,22 @@ class RemoteServer(object):
             core.logger.removeHandler(self.log_handler)
             self.log_handler = None
 
+    def client_onclose(self, client):
+        if client.closed and client in self.clients:
+            self.clients.remove(client)
+            worker.status.add('clients_count', -1)
+
     def run(self):
         while self.sock is not None and not worker.quit_event.is_set():
-            # ждём события
-            if core.gevent_used:
-                # gevent игнорирует событие закрытия сокета (self.sock)
-                socks = select.select(self.clients + [self.sock], [], [], 2)
-            else:
-                # стандартный select не игнорирует закрытие, но только если стоит таймаут
-                socks = select.select(self.clients + [self.sock], [], [], 60)
-            if not self.sock or not socks[0]:
-                continue
-
             try:
-                with self.lock:
-                    self._process_event(socks[0])
-            except:
-                worker.fail()
-
-    def _process_event(self, socks):
-        for x in socks:
-            if x is self.sock:
-                # Принимаем новое подключение
-                try:
-                    csock = self.sock.accept()[0]
-                except socket.error:
-                    continue
-                c = RemoteClient()
-                c.accept(csock)
-                self.clients.append(c)
-            else:
-                # Обрабатываем существующее подключение
-                x.process_client()
-                if x.closed:
-                    self.clients.remove(x)
+                csock = self.sock.accept()[0]
+            except socket.error:
+                continue
+            c = RemoteClient()
+            c.accept(csock)
+            self.clients.append(c)
+            worker.status.add('clients_count', 1)
+            threading.Thread(target=c.process_client).start()
 
     def pubsub_thread(self):
         while not worker.quit_event.is_set():
@@ -331,6 +305,7 @@ def start():
     server = RemoteServer(bind, password, unix_mode=unix_mode)
     worker.add_handler('exit', server.close)
     worker.add_handler("update_status", server.onupdate)
+    worker.status['clients_count'] = 0
 
     # этот поток получает данные от клиентов
     worker.start_thread(server.run)
