@@ -5,6 +5,8 @@ from __future__ import unicode_literals
 
 import time
 
+import tabun_api as api
+
 from .. import core, user, worker
 from ..db import db, get_db_last, set_db_last
 
@@ -31,12 +33,16 @@ def reader():
         if i >= 49:
             core.logger.error("Infinity activity loading! Break.")
             break
-        
+
         # качаем активность
         if last_loaded_id is None:
             last_loaded_id, raw_items = user.user.get_activity()
         else:
-            last_loaded_id, raw_items = user.user.get_more_activity(last_loaded_id)
+            try:
+                last_loaded_id, raw_items = user.user.get_more_activity(last_loaded_id)
+            except api.TabunError as exc:
+                core.logger.warning("Activity loading error: %s", exc)
+                break
         items.extend(raw_items)
 
         # запоминаем самый свежий айдишник
