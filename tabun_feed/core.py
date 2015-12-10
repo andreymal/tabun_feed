@@ -164,11 +164,7 @@ def load_plugins():
 
 
 def load_plugin(module):
-    module = text(module)
-    if module.startswith(':'):
-        module = 'tabun_feed.plugins.' + module[1:]
-    elif module.startswith('r:'):
-        module = 'tabun_feed.readers.' + module[2:]
+    module = get_full_module_name(module)
 
     if module in plugins:
         return plugins[module]
@@ -194,6 +190,19 @@ def load_plugin(module):
 
     plugins[module.decode('utf-8') if PY2 else module] = moduleobj
     return moduleobj
+
+
+def get_full_module_name(module):
+    module = text(module)
+    if module.startswith(':'):
+        module = 'tabun_feed.plugins.' + module[1:]
+    elif module.startswith('r:'):
+        module = 'tabun_feed.readers.' + module[2:]
+    return module
+
+
+def is_plugin_loaded(module):
+    return get_full_module_name(module) in plugins
 
 
 def notify(body):
