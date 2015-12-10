@@ -14,6 +14,7 @@ from tabun_feed import worker
 default_urlopen = None
 default_get_posts = None
 default_get_comments = None
+default_get_profile = None
 
 lock = RLock()
 last_requests = []
@@ -61,17 +62,25 @@ def patched_get_comments(user, url='/comments/', raw_data=None):
     return comments
 
 
+def patched_get_profile(user, username=None, raw_data=None):
+    profile = default_get_profile(user, username, raw_data)
+    worker.call_handlers_here('request_profile', profile)
+    return profile
+
+
 def init_tabun_plugin():
-    global default_urlopen,default_get_comments, default_get_posts
+    global default_urlopen, default_get_posts, default_get_comments, default_get_profile
 
     worker.status['request_counter'] = 0
     worker.status['request_now'] = None
     worker.status['last_requests'] = ''
 
-    default_get_comments = api.User.get_comments
-    default_get_posts = api.User.get_posts
     default_urlopen = api.User.urlopen
+    default_get_posts = api.User.get_posts
+    default_get_comments = api.User.get_comments
+    default_get_profile = api.User.get_profile
 
-    api.User.get_comments = patched_get_comments
-    api.User.get_posts = patched_get_posts
     api.User.urlopen = patched_urlopen
+    api.User.get_posts = patched_get_posts
+    api.User.get_comments = patched_get_comments
+    api.User.get_profile = patched_get_profile
