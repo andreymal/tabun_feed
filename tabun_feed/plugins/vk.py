@@ -6,7 +6,6 @@ from __future__ import unicode_literals
 import sys
 import json
 import time
-from threading import RLock
 
 if sys.version_info.major == 2:
     text = unicode
@@ -38,9 +37,9 @@ class App(object):
             args['access_token'] = self.access_token
         if self.v and 'v' not in args:
             args['v'] = self.v
-        
+
         params = ''
-        
+
         for key, data in args.items():
             if isinstance(data, (list, tuple)):
                 data = ','.join(text(x) for x in data)
@@ -48,18 +47,18 @@ class App(object):
                 data = text(data)
             params += quote(key) + '=' + quote(data) + '&'
         params = params[:-1]
-        
+
         if method == "GET":
             link += "?" + params
 
         if sys.version_info.major == 2:
             link = link.encode('utf-8')
-        
+
         req = urequest.Request(link, method)
-        
+
         if method == "POST":
             req.data = params.encode('utf-8')
-        
+
         for _ in range(10):
             try:
                 resp = urequest.urlopen(req, timeout=timeout)
@@ -69,7 +68,7 @@ class App(object):
                     raise
                 time.sleep(2)
         data = resp.read()
-            
+
         try:
             answer = json.loads(data.decode('utf-8'))
         except (KeyboardInterrupt, SystemExit):
@@ -80,7 +79,7 @@ class App(object):
                 "error_msg": "Unparsed VK answer",
                 "data": data
             }}
-            
+
         return answer
 
 

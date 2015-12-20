@@ -13,8 +13,11 @@ from tabun_feed.remote_server import remote_command
 vk_plug = core.load_plugin('tabun_feed.plugins.vk')
 vk = None
 
+targets = tuple(set(-x['id'] for x in vk_plug.targets.values() if x['id'] < 0))
+
 interval = 300
 last_align_time = None
+iter_current = -1
 
 
 code = r"""var count = -1;
@@ -29,18 +32,26 @@ return {"count": count, "users": users};"""
 
 
 def reader():
-    global last_align_time
+    global last_align_time, iter_current
+
+    iter_current += 1
     new_align_time = int(time.time()) // interval * interval
+
     if new_align_time - last_align_time < interval:
+        n = (iter_current * 2) % len(targets)
+        for i, group_id in enumerate(targets[n:n + 2]):
+            if i > 0:
+                time.sleep(0.4)
+            process_if_needed(group_id)
         return
 
     last_align_time = new_align_time
-    core.logger.debug('%s %s', time.strftime('%H:%M:%S', time.localtime(last_align_time)), time.strftime('%H:%M:%S'))
+    core.logger.debug('VK Online: %s %s', time.strftime('%H:%M:%S', time.localtime(last_align_time)), time.strftime('%H:%M:%S'))
 
-    targets = set(-x['id'] for x in vk_plug.targets.values() if x['id'] < 0)
     for i, group_id in enumerate(targets):
         if i > 0:
             time.sleep(0.5)
+        worker.status['vk_online'] = 'Processing {}'.format(group_id)
         try:
             process_group(group_id)
         except (KeyboardInterrupt, SystemExit):
@@ -48,9 +59,42 @@ def reader():
         except:
             worker.fail()
             core.logger.error('VK Online %d fail', group_id)
+        worker.status['vk_online'] = ''
 
     worker.status['vk_online_last'] = int(time.time())
     db.commit()
+
+
+def process_if_needed(group_id):
+    try:
+        result = vk.api('groups.getMembers', {'group_id': group_id, 'count': 0})
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except Exception as exc:
+        core.logger.warning('VK Online %d fail: %s', group_id, exc)
+        return
+
+    if not result.get('response'):
+        return
+
+    old_count = db.query(
+        'select count from vk_online where group_id = ? order by time desc limit 1',
+        (group_id,)
+    )
+    old_count = old_count[0][0] if old_count else -1
+
+    count = result['response'].get('count')
+    if count is not None and count != old_count:
+        time.sleep(0.3)
+        worker.status['vk_online'] = 'Processing {}'.format(group_id)
+        try:
+            process_group(group_id)
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except Exception as exc:
+            worker.fail()
+            core.logger.error('VK Online %d fail', group_id)
+        worker.status['vk_online'] = ''
 
 
 def process_group(group_id):
@@ -77,6 +121,8 @@ def process_group(group_id):
         rcode = code.replace('%GROUP_ID%', str(group_id)).replace('%OFFSET%', str(offset))
         try:
             result = vk.api('execute', {'code': rcode})
+        except (KeyboardInterrupt, SystemExit):
+            raise
         except Exception as exc:
             core.logger.warning('VK Online %d fail: %s', group_id, exc)
             count = -1
@@ -184,7 +230,8 @@ def cmd_vk_stat(packet, client):
 
 def init_tabun_plugin():
     global vk, interval, last_align_time
-    if not vk_plug.targets or not core.config.has_option('vk', 'access_token'):
+    if not targets or not core.config.has_option('vk', 'access_token'):
+        core.logger.warning('VK is not available; vk_online disabled')
         return
     vk = vk_plug.App()
 
@@ -212,4 +259,5 @@ def init_tabun_plugin():
     last_align_time = int(time.time()) // interval * interval
 
     worker.status['vk_online_last'] = db.query('select max(time) from vk_online')[0][0] or None
+    worker.status['vk_online'] = ''
     worker.add_reader(reader)
