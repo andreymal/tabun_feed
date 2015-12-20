@@ -83,6 +83,18 @@ class App(object):
         return answer
 
 
+def get_photo_url(photo, max_level='photo_2560', levels=('photo_2560', 'photo_1280', 'photo_807', 'photo_604', 'photo_130', 'photo_75')):
+    try:
+        pos = levels.index(max_level)
+    except:
+        return
+
+    for x in levels[pos:]:
+        url = photo.get(x)
+        if url:
+            return url
+
+
 def parse_vk_targets(line):
     line = [x.strip() for x in line.split(';') if x and ':' in x]
     result = {}
