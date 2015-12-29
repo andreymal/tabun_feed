@@ -107,7 +107,7 @@ class RemoteConnection(object):
         while packet is None:
             try:
                 data = self._sock.recv(65536)
-            except socket.error:
+            except:
                 data = b''
             if not data:
                 self.close()
@@ -127,7 +127,7 @@ class RemoteConnection(object):
         with self._lock:
             try:
                 self._sock.send(data)
-            except socket.error:
+            except:
                 self.close()
                 return 0
 

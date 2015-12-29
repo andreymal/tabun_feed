@@ -72,7 +72,7 @@ class RemoteClient(remote_connection.RemoteConnection):
     def process_packet(self, packet):
         if packet is None:
             return
-        
+
         # Авторизация при необходимости
         if not self.authorized:
             if not server.password or packet.get('authorize') == server.password:
@@ -115,7 +115,7 @@ class RemoteClient(remote_connection.RemoteConnection):
         for x in subs:
             if x not in client.subscriptions:
                 client.subscriptions.append(x)
-        
+
         packets = [{'cmd': 'subscribed', 'items': client.subscriptions}]
 
         if 'status' in packet['items']:
@@ -136,6 +136,19 @@ class RemoteServer(object):
         self.clients = []
 
         if self.typ == 'unix':
+            if os.path.exists(self.addr):
+                # Процесс после смерти может не прибрать за собой UNIX-сокет
+                s = socket.socket(socket.AF_UNIX)
+                try:
+                    s.connect(self.addr)
+                except:
+                    # Не подключились — прибираем самостоятельно
+                    os.remove(self.addr)
+                else:
+                    # Ой, процесс жив ещё — bind ниже выкинет исключение
+                    s.close()
+                del s
+
             self.sock = socket.socket(socket.AF_UNIX)
             self.sock.bind(self.addr)
             os.chmod(self.addr, unix_mode)
@@ -201,7 +214,7 @@ class RemoteServer(object):
         while self.sock is not None and not worker.quit_event.is_set():
             try:
                 csock = self.sock.accept()[0]
-            except socket.error:
+            except:
                 continue
             c = RemoteClient()
             c.accept(csock)
