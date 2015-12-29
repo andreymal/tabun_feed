@@ -21,7 +21,7 @@ def reader():
     if core.loglevel == core.logging.DEBUG:
         core.logger.debug('Downloaded posts: %s', ', '.join(text(x.post_id) for x in posts))
 
-    new_posts = []  # только для отладки
+    new_posts = []
 
     # подгружаем из базы информацию о последних постах
     post_infos = get_posts_info(x.post_id for x in posts)
@@ -62,14 +62,16 @@ def reader():
         if not status_changed:
             worker.status['iter_last_with_post'] = worker.status['iter']
             status_changed = True
-        if core.loglevel == core.logging.DEBUG:
-            new_posts.append(post.post_id)
+        new_posts.append((post, full_post))
 
         if worker.status['request_full_posts'] and post.short:
             time.sleep(2)  # не DDoS'им
 
+    # Для плагинов, желающих обработать все новые посты в одном обработчике
+    worker.call_handlers("new_posts", new_posts)
+
     if core.loglevel == core.logging.DEBUG:
-        core.logger.debug('New posts: %s', ', '.join(str(x) for x in new_posts))
+        core.logger.debug('New posts: %s', ', '.join(text(x[0].post_id) for x in new_posts))
 
     # стираем слишком старые посты
     if new_oldest_post_time is not None and new_oldest_post_time != oldest_post_time:

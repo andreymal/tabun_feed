@@ -3,8 +3,6 @@
 
 from __future__ import unicode_literals
 
-from . import core, db
-
 import os
 import sys
 import json
@@ -17,6 +15,8 @@ from threading import Thread, RLock, Event, local, current_thread
 
 import tabun_api as api
 from tabun_api.compat import text, binary, PY2
+
+from . import core, db
 
 if PY2:
     from Queue import PriorityQueue, Empty as QueueEmpty
@@ -63,11 +63,10 @@ class Status(object):
     @property
     def debug(self):
         return self._debug
-    
+
     @property
     def lock(self):
         return self._lock
-    
 
     def __enter__(self):
         if self._debug:
@@ -261,7 +260,7 @@ def call_handlers_here(name, *args):
             finally:
                 if name != 'update_status':
                     touch_alivefile()
-    
+
     if not prs:
         if name != 'update_status':
             touch_alivefile()

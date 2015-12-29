@@ -21,7 +21,7 @@ def reader():
     if core.loglevel == core.logging.DEBUG:
         core.logger.debug('Downloaded %d comments, last 10: %s', len(comments), ", ".join(text(x.comment_id) for x in comments[-10:]))
     
-    new_comments = []  # только для отладки
+    new_comments = []
 
     comment_infos = get_comments_info(x.comment_id for x in comments)
 
@@ -52,11 +52,13 @@ def reader():
             worker.call_handlers("new_deleted_comment", comment)
         else:
             worker.call_handlers("new_comment", comment)
-        if core.loglevel == core.logging.DEBUG:
-            new_comments.append(comment.comment_id)
+        new_comments.append(comment)
+
+    # Для плагинов, желающих обработать все новые комменты в одном обработчике
+    worker.call_handlers("new_comments", new_comments)
 
     if core.loglevel == core.logging.DEBUG:
-        core.logger.debug('New comments: %s', ', '.join(text(x) for x in new_comments))
+        core.logger.debug('New comments: %s', ', '.join(text(x.comment_id) for x in new_comments))
 
     # стираем слишком старые комментарии
     if new_oldest_comment_time is not None and new_oldest_comment_time != oldest_comment_time:
