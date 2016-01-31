@@ -65,14 +65,14 @@ def reader():
         new_items.append(item)
     if not new_items:
         return
-    new_items = reversed(new_items)
+    new_items = list(reversed(new_items))
 
     for item in new_items:
         worker.call_handlers("new_activity", item)
 
-    worker.call_handlers("activity_list", items)
+    worker.call_handlers("activity_list", items, len(new_items))
 
-    # сохраняем кэш активности (10 штук про запас, ибо активность может пропадать, например, с удалёными постами)
+    # сохраняем кэш активности (10 штук про запас, ибо активность может пропадать, например, с удалёнными постами)
     with db:
         db.execute('delete from last_activity')
         for item in items[:10]:
