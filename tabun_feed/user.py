@@ -221,6 +221,11 @@ def open_with_check(url, timeout=None):
                 if i >= 9 or worker.quit_event.is_set():
                     raise
                 worker.quit_event.wait(3)
+            except IOError as exc:  # перехватывается в user.urlopen, только вот read() уже не там
+                worker.status['request_error'] = 'IOError ' + str(exc)
+                if i >= 9 or worker.quit_event.is_set():
+                    raise
+                worker.quit_event.wait(3)
 
     if raw_data:
         user.update_userinfo(raw_data)
