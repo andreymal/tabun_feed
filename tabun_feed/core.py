@@ -27,7 +27,7 @@ alivefile
 username
 password
 session_id
-http_host = http://tabun.everypony.ru
+http_host
 session_cookie_name = TABUNSESSIONID
 iterations_interval = 10
 query_interval = 1.5

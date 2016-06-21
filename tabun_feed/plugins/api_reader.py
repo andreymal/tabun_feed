@@ -11,7 +11,7 @@ from tabun_api.compat import text, binary
 from tabun_feed import worker
 
 
-default_urlopen = None
+default_send_request = None
 default_get_posts = None
 default_get_comments = None
 default_get_profile = None
@@ -30,23 +30,29 @@ def normalize_url(user, url):
     return norm_url
 
 
-def patched_urlopen(user, *args, **kwargs):
-    # TODO: поменять на send_request?
+def patched_send_request(user, request, *args, **kwargs):
     global last_requests
-    url = kwargs['url'] if 'url' in kwargs else args[0]
+
+    url = request.get_full_url()
+    if isinstance(url, binary):
+        url = url.decode('utf-8', 'replace')
+
+    http_host = user.http_host or api.http_host
+    if url.startswith(http_host):
+        url = url[len(http_host):]
 
     with lock:
         tm = time.time()
         last_requests = [x for x in last_requests if x[0] > time.time() - 60]
-        last_requests.append((tm, text(url)))
+        last_requests.append((tm, url))
         worker.status['last_requests'] = '\n'.join(text(x[0]) + ' ' + text(x[1]) for x in last_requests)
 
     worker.status['request_counter'] += 1
     try:
         worker.status['request_now'] = url
-        return default_urlopen(user, *args, **kwargs)
+        return default_send_request(user, request, *args, **kwargs)
     finally:
-        if worker.status['request_now'] is url:
+        if worker.status['request_now'] == url:
             worker.status['request_now'] = None
 
 
@@ -69,18 +75,18 @@ def patched_get_profile(user, username=None, raw_data=None):
 
 
 def init_tabun_plugin():
-    global default_urlopen, default_get_posts, default_get_comments, default_get_profile
+    global default_send_request, default_get_posts, default_get_comments, default_get_profile
 
     worker.status['request_counter'] = 0
     worker.status['request_now'] = None
     worker.status['last_requests'] = ''
 
-    default_urlopen = api.User.urlopen
+    default_send_request = api.User.send_request
     default_get_posts = api.User.get_posts
     default_get_comments = api.User.get_comments
     default_get_profile = api.User.get_profile
 
-    api.User.urlopen = patched_urlopen
+    api.User.send_request = patched_send_request
     api.User.get_posts = patched_get_posts
     api.User.get_comments = patched_get_comments
     api.User.get_profile = patched_get_profile
