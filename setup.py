@@ -6,7 +6,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='tabun_feed',
-    version='0.6.0',
+    version='0.6.1',
     description='Watcher of new content on tabun.everypony.ru',
     author='andreymal',
     author_email='andriyano-31@mail.ru',
@@ -14,7 +14,8 @@ setup(
     url='https://github.com/andreymal/tabun_feed',
     platforms=['linux', 'osx', 'bsd'],
     packages=find_packages(),
-    install_requires=['tabun_api>=0.6.0'],
+    include_package_data=True,
+    install_requires=['tabun_api>=0.7.0'],
     zip_safe=False,
     entry_points={
         'console_scripts': [

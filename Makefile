@@ -1,4 +1,17 @@
-.PHONY: clean-pyc clean-build clean docs
+.PHONY: help clean clean-build clean-pyc dist install develop
+
+PYTHON?=python
+PIP?=pip
+
+help:
+	@echo "tabun_feed"
+	@echo
+	@echo "clean - remove all build and Python artifacts"
+	@echo "clean-build - remove build artifacts"
+	@echo "clean-pyc - remove Python file artifacts"
+	@echo "dist - package"
+	@echo "install - install the package to the active Python's site-packages"
+	@echo "develop - install the package for development as editable"
 
 clean: clean-build clean-pyc
 
@@ -6,8 +19,8 @@ clean-build:
 	rm -fr build/
 	rm -fr dist/
 	rm -fr .eggs/
-	find . -name '*.egg-info' -exec rm -fr {} +
-	find . -name '*.egg' -exec rm -rf {} +
+	rm -fr *.egg-info
+	rm -fr *.egg
 
 clean-pyc:
 	find . -name '*.pyc' -exec rm -f {} +
@@ -16,12 +29,13 @@ clean-pyc:
 	find . -name '__pycache__' -exec rm -fr {} +
 
 dist: clean
-	python setup.py sdist
+	$(PYTHON) setup.py sdist
 	ls -l dist
 
 install: clean
-	python setup.py install
+	$(PYTHON) setup.py install
 
 develop:
-	pip install -r requirements.txt
-	python setup.py develop
+	$(PIP) install -r requirements.txt
+	$(PIP) install -r optional-requirements.txt
+	$(PYTHON) setup.py develop
