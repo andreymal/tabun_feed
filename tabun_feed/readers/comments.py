@@ -88,13 +88,27 @@ def load_comments(last_comment_time=None):
         for page_num in range(1, pages_count + 1):
             current_url = (url.rstrip('/') + ('/page%d/' % page_num)) if page_num > 1 else url
             # комменты грузятся ОЧЕНЬ долго:
-            raw_data = user.open_with_check(current_url, timeout=max(120, user.user.timeout))
+            try:
+                raw_data = user.open_with_check(current_url, timeout=max(120, user.user.timeout))
+            except api.TabunError as exc:
+                # Лента может быть убита удалённым блогом; вытаскиваем что получится
+                if exc.code != 500:
+                    raise
+                raw_data = exc.exc.read()
+                if raw_data.rstrip().endswith(b'<a href="') and b'<li class="comment-link">' in raw_data[-100:]:
+                    core.logger.error('Comments error 500, trying to parse partially')
+                else:
+                    raise
             worker.call_handlers('raw_data', current_url, raw_data)
 
-            comments = sorted(user.user.get_comments(url, raw_data=raw_data).values(), key=lambda x: x.time)
+            comments = sorted(user.user.get_comments(current_url, raw_data=raw_data).values(), key=lambda x: x.time)
             raw_comments.extend(comments)
             if page_num < 2:
                 pages.append(comments)
+
+            if not comments:
+                core.logger.error('Comments feed returned 0 comments, looks like impossible situation')
+                break
 
             # не качаем то, что качать не требуется
             if last_comment_time and time.mktime(comments[0].time) < last_comment_time:
