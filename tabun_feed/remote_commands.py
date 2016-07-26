@@ -22,7 +22,7 @@ def cmd_get_status(packet, client):
     else:
         result = {}
         for key in items:
-            result = worker.status.get_json_key(key)
+            result[key] = worker.status.get_json_key(key)
 
     return {'cmd': 'status', 'status': result}
 
