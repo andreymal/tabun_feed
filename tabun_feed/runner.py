@@ -11,7 +11,8 @@ import logging
 import tabun_api as api
 
 
-api.http_headers["user-agent"] = 'tabun_feed/0.6.0; ' + api.http_headers["user-agent"]
+tf_user_agent = api.http_headers["user-agent"] + ' tabun_feed/0.6.0'
+api.http_headers["user-agent"] = tf_user_agent
 
 go_thread = None
 
@@ -45,7 +46,7 @@ def go():
     remote_server.start()
     worker.start_handlers()
 
-    core.logger.debug('Starting')
+    core.logger.info('Starting %s', tf_user_agent)
     try:
         user.auth_global()
     except (KeyboardInterrupt, SystemExit):
@@ -88,7 +89,7 @@ def main(args=None, config_file=None):
     # worker сам не выключается, мы его выключаем
     signal.signal(signal.SIGTERM, sigterm)
     signal.signal(signal.SIGINT, sigterm)
-    
+
     # worker ничего не знает про gevent, разруливаем его запуск и корректное выключение
     if core.gevent_used:
         import gevent
