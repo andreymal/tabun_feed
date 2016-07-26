@@ -5,7 +5,6 @@ from __future__ import unicode_literals
 
 import time
 
-import tabun_api as api
 from tabun_api.compat import text
 
 from .. import core, worker, user
@@ -46,16 +45,31 @@ def reader():
         short_hash, full_hash = post_infos.get(post.post_id, (None, None))
         if short_hash or full_hash:
             # пост уже был обработан
+            new_short_hash = post.hashsum()
+            if new_short_hash != short_hash:
+                # Упс, пост изменили
+                if not post.short:
+                    full_post = post
+                elif worker.status['request_full_posts'] and post.short:
+                    full_post = (user.user if post.private else user.anon).get_post(post.post_id, post.blog)
+                else:
+                    full_post = None
+                new_full_hash = full_post.hashsum() if full_post else 'N/A'
+                set_post_info(post.post_id, tm, new_short_hash, new_full_hash)
+                worker.call_handlers('edit_post', post, full_post)
             continue
 
         if not post.short:
             full_post = post
         elif worker.status['request_full_posts'] and post.short:
-            full_post = user.user.get_post(post.post_id, post.blog)
+            full_post = (user.user if post.private else user.anon).get_post(post.post_id, post.blog)
         else:
             full_post = None
 
-        set_post_info(post.post_id, tm, 'short', 'full')  # TODO: посчитать хэши
+        short_hash = post.hashsum()
+        full_hash = full_post.hashsum() if full_post else 'N/A'
+
+        set_post_info(post.post_id, tm, short_hash, full_hash)
 
         # отправляем в другой поток на обработку
         worker.call_handlers("new_post", post, full_post)

@@ -40,12 +40,18 @@ def reader():
         if new_last_comment_time is None or tm > new_last_comment_time:
             new_last_comment_time = tm
 
-        comment_hash = comment_infos.get(comment.comment_id, None)
+        comment_hash = comment_infos.get(comment.comment_id, (None,))[0]
         if comment_hash:
             # комментарий уже был обработан
+            new_comment_hash = comment.hashsum()
+            if new_comment_hash != comment_hash:
+                # Упс, коммент изменили
+                set_comment_info(comment.comment_id, tm, new_comment_hash)
+                worker.call_handlers('edit_comment', comment)
             continue
 
-        set_comment_info(comment.comment_id, tm, 'hash')  # TODO: посчитать хэш
+        comment_hash = comment.hashsum()
+        set_comment_info(comment.comment_id, tm, comment_hash)
 
         # отправляем в другой поток на обработку
         if comment.deleted:
@@ -119,7 +125,7 @@ def load_comments(last_comment_time=None):
     for comment in sorted(raw_comments, key=lambda x: x.time):
         if comment.comment_id not in comment_ids:
             comments.append(comment)
-            comment_ids.append(comment.comment_id) 
+            comment_ids.append(comment.comment_id)
 
     return comments, pages
 
