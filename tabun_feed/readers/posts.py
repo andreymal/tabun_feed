@@ -52,6 +52,9 @@ def reader():
                     full_post = post
                 elif worker.status['request_full_posts'] and post.short:
                     full_post = (user.user if post.private else user.anon).get_post(post.post_id, post.blog)
+                    if post.vote_total is not None and full_post.vote_total is None:
+                        full_post.vote_total = post.vote_total
+                        full_post.vote_count = post.vote_count
                 else:
                     full_post = None
                 new_full_hash = full_post.hashsum() if full_post else 'N/A'
@@ -63,6 +66,9 @@ def reader():
             full_post = post
         elif worker.status['request_full_posts'] and post.short:
             full_post = (user.user if post.private else user.anon).get_post(post.post_id, post.blog)
+            if post.vote_total is not None and full_post.vote_total is None:
+                full_post.vote_total = post.vote_total
+                full_post.vote_count = post.vote_count
         else:
             full_post = None
 

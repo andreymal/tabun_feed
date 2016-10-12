@@ -20,10 +20,10 @@
 
 # Список плагинов (через запятую), которые нужно загрузить;
 # r:foo разворачивается в tabun_feed.readers.foo, а
-# :foo - d tabun_feed.plugins.foo
+# :foo - в tabun_feed.plugins.foo
 # Плагины являются обычными модулями Python
 # plugins = r:posts, r:comments, :mysql, my_cool_plugin
-plugins = tabun_feed.readers.posts
+plugins = tabun_feed.readers.posts, :monitor
 
 # Если 1, записывает сообщения об ошибках в базу данных
 # (иногда удообнее чем логи)

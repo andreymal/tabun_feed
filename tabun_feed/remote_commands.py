@@ -5,8 +5,6 @@ from __future__ import unicode_literals
 
 import time
 
-from tabun_api.compat import text
-
 from . import worker
 from .remote_server import remote_command
 
