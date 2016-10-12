@@ -178,13 +178,10 @@ def load_plugin(module):
         if hasattr(moduleobj, 'init_tabun_plugin'):
             moduleobj.init_tabun_plugin()
 
-    except (KeyboardInterrupt, SystemExit):
-        raise
-
     except PluginError as exc:
         raise PluginError('Dependence for %s: %s' % (module, exc))
 
-    except:
+    except Exception:
         logger.error(traceback.format_exc())
         raise PluginError('Cannot load module %s' % module)
 
@@ -273,9 +270,7 @@ def sendmail(to, subject, items, fro=None):
         s = smtplib.SMTP(config.get('email', 'host'), config.getint('email', 'port'), timeout=config.getint('email', 'timeout'))
         s.sendmail(fro, to, msg.as_string() if PY2 else msg.as_string().encode('utf-8'))
         s.quit()
-    except (KeyboardInterrupt, SystemExit):
-        raise
-    except:
+    except Exception:
         logger.error(traceback.format_exc())
         return False
 

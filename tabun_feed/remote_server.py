@@ -66,7 +66,7 @@ class RemoteClient(remote_connection.RemoteConnection):
                 result = self.process_packet(packet)
                 if result is not None:
                     self.send(result)
-        except:
+        except Exception:
             worker.fail()
 
     def process_packet(self, packet):
@@ -96,7 +96,7 @@ class RemoteClient(remote_connection.RemoteConnection):
         # и выполняем её
         try:
             result = func(packet, self)
-        except:
+        except Exception:
             worker.fail()
             return {'error': 'Internal server error'}
 
@@ -141,7 +141,7 @@ class RemoteServer(object):
                 s = socket.socket(socket.AF_UNIX)
                 try:
                     s.connect(self.addr)
-                except:
+                except Exception:
                     # Не подключились — прибираем самостоятельно
                     os.remove(self.addr)
                 else:
@@ -175,7 +175,7 @@ class RemoteServer(object):
             return
         try:
             self.send_pubsub('log', msg)
-        except:
+        except Exception:
             self.nolog = True  # избегаем рекурсии
             try:
                 worker.fail()
@@ -214,7 +214,7 @@ class RemoteServer(object):
         while self.sock is not None and not worker.quit_event.is_set():
             try:
                 csock = self.sock.accept()[0]
-            except:
+            except Exception:
                 continue
             c = RemoteClient()
             c.accept(csock)

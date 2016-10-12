@@ -27,9 +27,7 @@ def reader():
         worker.status['vk_suggestions'] = 'Processing {}'.format(group_id)
         try:
             process_suggestions(group_id)
-        except (KeyboardInterrupt, SystemExit):
-            raise
-        except:
+        except Exception:
             worker.fail()
         worker.status['vk_suggestions'] = ''
 
@@ -42,8 +40,6 @@ def process_suggestions(group_id):
             'wall.get',
             {'owner_id': -group_id, 'offset': 0, 'count': 100, 'extended': 1, 'filter': 'suggests'}
         )
-    except (KeyboardInterrupt, SystemExit):
-        raise
     except Exception as exc:
         core.logger.warning('VK Suggestions %d fail: %s', group_id, exc)
         return

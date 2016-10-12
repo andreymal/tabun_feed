@@ -71,9 +71,7 @@ class App(object):
 
         try:
             answer = json.loads(data.decode('utf-8'))
-        except (KeyboardInterrupt, SystemExit):
-            raise
-        except:
+        except Exception:
             answer = {"error": {
                 "error_code": 0,
                 "error_msg": "Unparsed VK answer",
@@ -86,7 +84,7 @@ class App(object):
 def get_photo_url(photo, max_level='photo_2560', levels=('photo_2560', 'photo_1280', 'photo_807', 'photo_604', 'photo_130', 'photo_75')):
     try:
         pos = levels.index(max_level)
-    except:
+    except Exception:
         return
 
     for x in levels[pos:]:

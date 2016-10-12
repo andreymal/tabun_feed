@@ -54,9 +54,7 @@ def reader():
         worker.status['vk_online'] = 'Processing {}'.format(group_id)
         try:
             process_group(group_id)
-        except (KeyboardInterrupt, SystemExit):
-            raise
-        except:
+        except Exception:
             worker.fail()
             core.logger.error('VK Online %d fail', group_id)
         worker.status['vk_online'] = ''
@@ -68,8 +66,6 @@ def reader():
 def process_if_needed(group_id):
     try:
         result = vk.api('groups.getMembers', {'group_id': group_id, 'count': 0})
-    except (KeyboardInterrupt, SystemExit):
-        raise
     except Exception as exc:
         core.logger.warning('VK Online %d fail: %s', group_id, exc)
         return
@@ -89,8 +85,6 @@ def process_if_needed(group_id):
         worker.status['vk_online'] = 'Processing {}'.format(group_id)
         try:
             process_group(group_id)
-        except (KeyboardInterrupt, SystemExit):
-            raise
         except Exception as exc:
             worker.fail()
             core.logger.error('VK Online %d fail', group_id)
@@ -121,8 +115,6 @@ def process_group(group_id):
         rcode = code.replace('%GROUP_ID%', str(group_id)).replace('%OFFSET%', str(offset))
         try:
             result = vk.api('execute', {'code': rcode})
-        except (KeyboardInterrupt, SystemExit):
-            raise
         except Exception as exc:
             core.logger.warning('VK Online %d fail: %s', group_id, exc)
             count = -1
@@ -192,19 +184,19 @@ def process_group(group_id):
 def cmd_vk_stat(packet, client):
     try:
         groups = [int(x) for x in packet.get('groups', ())]
-    except:
+    except Exception:
         return {'error': 'Invalid groups'}
     if not groups:
         groups = [x[0] for x in db.query('select distinct group_id from vk_online')]
 
     try:
         start_time = int(packet['start_time']) if packet.get('start_time') is not None else None
-    except:
+    except Exception:
         return {'error': 'Invalid start time'}
 
     try:
         end_time = int(packet['end_time']) if packet.get('end_time') is not None else int(time.time())
-    except:
+    except Exception:
         return {'error': 'Invalid end time'}
 
     result = {}

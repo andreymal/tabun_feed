@@ -46,7 +46,7 @@ def cmd_failures(packet, client):
     try:
         offset = max(0, int(packet.get('offset', 0)))
         count = max(0, min(500, int(packet.get('count', 20))))
-    except:
+    except Exception:
         return {'error': 'Invalid parameters'}
     return {'cmd': 'failures', 'failures': worker.get_failures(offset, count)}
 

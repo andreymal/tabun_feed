@@ -109,12 +109,12 @@ class Status(object):
             for x in self._subscriptions[key]:
                 try:
                     x(key, old, value)
-                except:
+                except Exception:
                     fail()
         if self.onupdate and 'workers' not in self.onupdate_ignore_for:
             try:
                 self.onupdate(key, old, value)
-            except:
+            except Exception:
                 fail()
 
     def add(self, key, value=1, loop_on=None):
@@ -162,7 +162,7 @@ class Status(object):
             try:
                 json.dumps(value, ensure_ascii=False)  # checking
                 return value
-            except:
+            except Exception:
                 return text(value)
         return value
 
@@ -176,7 +176,7 @@ class Status(object):
                 try:
                     json.dumps(value, ensure_ascii=False)  # checking
                     state[key] = value
-                except:
+                except Exception:
                     state[key] = text(value)
         return state
 
@@ -251,9 +251,7 @@ def call_handlers_here(name, *args):
                         func(*args)
                 else:
                     func(*args)
-            except (KeyboardInterrupt, SystemExit):
-                raise
-            except:
+            except Exception:
                 core.logger.error('Handler %s (%s) failed:', name, func)
                 fail()
                 errors += 1
@@ -281,8 +279,6 @@ def touch_alivefile():
     try:
         with open(path, 'wb') as fp:
             fp.write((text(int(status['alivetime'])) + '\n').encode('utf-8'))
-    except (KeyboardInterrupt, SystemExit):
-        raise
     except Exception as exc:
         core.logger.error('Cannot touch alive file %s: %s', path, exc)
 
@@ -323,7 +319,7 @@ def run_handlers_thread():
 
         try:
             call_handlers_here(name, *args)
-        except:
+        except Exception:
             fail()
             quit_event.wait(5)
 
@@ -347,15 +343,13 @@ def run_reader():
 
                 try:
                     func()
-                except (KeyboardInterrupt, SystemExit):
-                    raise
                 except api.TabunError as exc:
                     core.logger.warning('Tabun error: %s', exc.message)
                     status['error'] = exc.message
                 except socket_timeout as exc:
                     core.logger.warning('Tabun result read error: timeout')
                     status['error'] = 'timeout'
-                except:
+                except Exception:
                     fail()
                     quit_event.wait(5)
 
@@ -421,7 +415,7 @@ def fail(desc=None):
                 format_failure_email(exc),
                 fro=core.config.get('email', 'errors_from') or None
             )
-        except:
+        except Exception:
             core.logger.error(traceback.format_exc())
 
     try:
@@ -450,7 +444,7 @@ def fail(desc=None):
             (fail_hash, int(time.time()), int(time.time()), exc, desc or None, st)
         ).lastrowid
 
-    except:
+    except Exception:
         traceback.print_exc()
         return None
 
@@ -504,7 +498,8 @@ def start_thread(func, *args, **kwargs):
         status.append('threads', item)
         try:
             func(*args, **kwargs)
-        except:
+        except:  # pylint: disable=W0702
+            # KeyobardInterrupt и SystemExit в неосновном потоке — тоже ошибка
             fail()
         finally:
             status.remove('threads', item)
@@ -531,7 +526,7 @@ def stop():
 
     try:
         db.db.commit()
-    except:
+    except Exception:
         pass
 
     core.logger.info('Exiting')
@@ -548,7 +543,7 @@ def run():
         run_reader()
     except (KeyboardInterrupt, SystemExit):
         print('')
-    except:
+    except Exception:
         fail()
         return False
     else:

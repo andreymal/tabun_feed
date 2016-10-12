@@ -71,7 +71,7 @@ class RemoteConnection(object):
                 try:
                     self._sock.shutdown(socket.SHUT_RDWR)
                     self._sock.close()
-                except:
+                except Exception:
                     pass
                 self._sock = None
                 if self._parser:
@@ -107,7 +107,7 @@ class RemoteConnection(object):
         while packet is None:
             try:
                 data = self._sock.recv(65536)
-            except:
+            except Exception:
                 data = b''
             if not data:
                 self.close()
@@ -127,7 +127,7 @@ class RemoteConnection(object):
         with self._lock:
             try:
                 self._sock.send(data)
-            except:
+            except Exception:
                 self.close()
                 return 0
 
@@ -187,7 +187,7 @@ def start_parser():
 
         try:
             packet = jd.decode(packet.decode('utf-8'))
-        except:
+        except Exception:
             break
 
         # 5) Отдаём его
