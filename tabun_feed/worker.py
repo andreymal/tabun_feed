@@ -325,8 +325,7 @@ def run_handlers_thread():
 
 
 def run_reader():
-    sleep_time = core.config.getfloat('tabun_feed', 'iterations_interval')
-    status['iterations_interval'] = sleep_time
+    status['iterations_interval'] = core.config.getfloat('tabun_feed', 'iterations_interval')
 
     while not quit_event.is_set():
         with status:
@@ -361,7 +360,7 @@ def run_reader():
             status['reader_current'] = 0
             core.logger.debug('Watcher iteration ok')
 
-        quit_event.wait(sleep_time)
+        quit_event.wait(status['iterations_interval'])
 
 
 def format_failure_email(data):

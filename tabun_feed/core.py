@@ -32,6 +32,8 @@ session_cookie_name = TABUNSESSIONID
 iterations_interval = 10
 query_interval = 1.5
 timeout = 15
+tries_if_unauthorized = 60
+tries_if_error = 10
 
 [email]
 from = tabun_feed@example.com

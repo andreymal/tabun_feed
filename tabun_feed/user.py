@@ -103,6 +103,12 @@ def open_with_check(url, timeout=None):
     Если за 10 попыток скачать не получилось, кидает исключение.
     Если за 60 попыток не получилось залогиниться, возвращает то что есть.
     """
+
+    # Забираем таймеры из конфига (вызов тут, а не при запуске, позволяет
+    # менять таймеры налету через удалённое управление)
+    max_tries = max(1, core.config.getint('tabun_feed', 'tries_if_unauthorized'))
+    max_error_tries = max(1, core.config.getint('tabun_feed', 'tries_if_error'))
+
     raw_data = None
     tries = 0
     # узнаём, можем ли мы вообще перелогиниться
@@ -110,9 +116,10 @@ def open_with_check(url, timeout=None):
 
     # Делаем вторую и последующую попытки, пока:
     # 1) tabun_feed не выключили (первую попытку всё равно качаем);
-    # 2) Попыток меньше шестидеяти (вроде достаточный срок, чтобы лежачий мускуль Табуна успевал проболеть);
+    # 2) Попыток меньше шестидеяти (по умолчанию; вроде достаточный срок,
+    #    чтобы лежачий мускуль Табуна успевал проболеть);
     # 3) Мы не авторизованы, если в конфиге прописана авторизация.
-    while raw_data is None or (not worker.quit_event.is_set() and tries < 60 and can_auth and user.update_userinfo(raw_data) is None):
+    while raw_data is None or (not worker.quit_event.is_set() and tries < max_tries and can_auth and user.update_userinfo(raw_data) is None):
         if raw_data is not None:
             # если мы попали сюда, то нас разлогинило
             worker.status['request_error'] = 'need relogin'
@@ -133,7 +140,7 @@ def open_with_check(url, timeout=None):
 
         tries += 1
         # скачиваем (несколько попыток)
-        for i in range(10):
+        for i in range(max_error_tries):
             # бросаем всё, если нужно завершить работу
             if raw_data is not None and worker.quit_event.is_set():
                 break
@@ -145,8 +152,8 @@ def open_with_check(url, timeout=None):
                 break  # залогиненность проверяем в условии while
             except api.TabunError as exc:
                 worker.status['request_error'] = exc.message
-                # после десятой попытки или при выходе сдаёмся
-                if i >= 9 or worker.quit_event.is_set():
+                # после последней попытки или при выходе сдаёмся
+                if i >= max_error_tries - 1 or worker.quit_event.is_set():
                     raise
                 worker.quit_event.wait(3)
 
