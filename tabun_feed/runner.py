@@ -11,7 +11,7 @@ import logging
 import tabun_api as api
 
 
-tf_user_agent = api.http_headers["user-agent"] + ' tabun_feed/0.6.0'
+tf_user_agent = api.http_headers["user-agent"] + ' tabun_feed/0.6.1'
 api.http_headers["user-agent"] = tf_user_agent
 
 go_thread = None
