@@ -13,7 +13,7 @@ anon = None
 last_requests = []
 
 
-def auth(username=None, password=None, session_id=None, http_host=None, session_cookie_name=None, query_interval=None, timeout=None):
+def auth(username=None, password=None, session_id=None, key=None, http_host=None, session_cookie_name=None, query_interval=None, timeout=None):
     """Проходит авторизацию на табуне по указанным параметрам и возвращает пользователя.
     Число попыток не ограничено: подвиснет интернет, упадёт сайт — функция дождётся, пока всё починится.
     Может вернуть None, если в процессе авторизации процесс решили остановить.
@@ -32,7 +32,7 @@ def auth(username=None, password=None, session_id=None, http_host=None, session_
             u = None
             # при наличии session_id логиниться, возможно, и не надо
             if session_id and password:
-                tmpuser = api.User(session_id=session_id)
+                tmpuser = api.User(session_id=session_id, key=key)
                 if tmpuser.username:
                     if username == tmpuser.username:
                         core.logger.info('Fast login %s!', username)
@@ -42,6 +42,7 @@ def auth(username=None, password=None, session_id=None, http_host=None, session_
             if u is None:
                 u = api.User(
                     session_id=session_id,
+                    key=key,
                     login=username,
                     passwd=password,
                     http_host=http_host,
@@ -76,6 +77,7 @@ def auth_global():
     global user, anon
     user = auth(
         session_id=core.config.get('tabun_feed', 'session_id'),
+        key=core.config.get('tabun_feed', 'key'),
         username=core.config.get('tabun_feed', 'username'),
         password=core.config.get('tabun_feed', 'password'),
         http_host=core.config.get('tabun_feed', 'http_host'),

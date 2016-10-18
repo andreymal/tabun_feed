@@ -27,6 +27,7 @@ alivefile
 username
 password
 session_id
+key
 http_host
 session_cookie_name = TABUNSESSIONID
 iterations_interval = 10
