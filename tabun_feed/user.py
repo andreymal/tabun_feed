@@ -3,6 +3,8 @@
 
 from __future__ import unicode_literals
 
+import json
+
 import tabun_api as api
 
 from . import core, worker
@@ -13,7 +15,7 @@ anon = None
 last_requests = []
 
 
-def auth(username=None, password=None, session_id=None, key=None, http_host=None, session_cookie_name=None, query_interval=None, timeout=None):
+def auth(username=None, password=None, session_id=None, key=None, http_host=None, session_cookie_name=None, query_interval=None, timeout=None, ssl_params=None):
     """Проходит авторизацию на табуне по указанным параметрам и возвращает пользователя.
     Число попыток не ограничено: подвиснет интернет, упадёт сайт — функция дождётся, пока всё починится.
     Может вернуть None, если в процессе авторизации процесс решили остановить.
@@ -26,13 +28,13 @@ def auth(username=None, password=None, session_id=None, key=None, http_host=None
     u = None
     errors = 0
 
-    # авторизация пользователя
+    # Авторизация пользователя
     while not worker.quit_event.is_set():
         try:
             u = None
             # при наличии session_id логиниться, возможно, и не надо
             if session_id and password:
-                tmpuser = api.User(session_id=session_id, key=key)
+                tmpuser = api.User(session_id=session_id, key=key, http_host=http_host, ssl_params=ssl_params)
                 if tmpuser.username:
                     if username == tmpuser.username:
                         core.logger.info('Fast login %s!', username)
@@ -47,6 +49,7 @@ def auth(username=None, password=None, session_id=None, key=None, http_host=None
                     passwd=password,
                     http_host=http_host,
                     session_cookie_name=session_cookie_name or 'TABUNSESSIONID',
+                    ssl_params=ssl_params,
                 )
             break
         except api.TabunError as exc:
@@ -75,6 +78,7 @@ def auth_global():
     После завершения вызывает группу обработчиков relogin_user (если процесс не решили остановить).
     """
     global user, anon
+    ssl_params = json.loads(core.config.get('tabun_feed', 'ssl_params') or '{}')
     user = auth(
         session_id=core.config.get('tabun_feed', 'session_id'),
         key=core.config.get('tabun_feed', 'key'),
@@ -82,6 +86,7 @@ def auth_global():
         password=core.config.get('tabun_feed', 'password'),
         http_host=core.config.get('tabun_feed', 'http_host'),
         session_cookie_name=core.config.get('tabun_feed', 'session_cookie_name'),
+        ssl_params=ssl_params,
     )
     if user is None:
         return
@@ -92,12 +97,13 @@ def auth_global():
         anon = auth(
             http_host=core.config.get('tabun_feed', 'http_host'),
             session_cookie_name=core.config.get('tabun_feed', 'session_cookie_name'),
+            ssl_params=ssl_params,
         )
     if anon is None:
         return
 
     core.logger.info("Logged in as %s", user.username or '[anonymous]')
-    worker.call_handlers("relogin_user")
+    worker.call_handlers_now("relogin_user")
 
 
 def open_with_check(url, timeout=None):

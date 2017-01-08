@@ -29,6 +29,7 @@ password
 session_id
 key
 http_host
+ssl_params
 session_cookie_name = TABUNSESSIONID
 iterations_interval = 10
 query_interval = 1.5
