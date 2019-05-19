@@ -81,6 +81,7 @@ def main(args=None, config_file=None):
 
     db.init()
     worker.touch_pidfile()
+    worker.touch_started_at_file()
 
     # Инициализируем плагины (здесь уже могут появляться новые потоки)
     if not core.load_plugins():

@@ -297,8 +297,20 @@ def touch_pidfile():
         core.logger.error('Cannot write pid file: %s', exc)
 
 
+def touch_started_at_file():
+    path = core.config.get('tabun_feed', 'started_at_file')
+    if not path:
+        return
+
+    try:
+        with open(path, 'wb') as fp:
+            fp.write(text(status['started_at']).encode('utf-8') + b'\n')
+    except Exception as exc:
+        core.logger.error('Cannot write started_at file: %s', exc)
+
+
 def clear_runfiles():
-    for path in (core.config.get('tabun_feed', 'pidfile'),):
+    for path in (core.config.get('tabun_feed', 'pidfile'), core.config.get('tabun_feed', 'started_at_file')):
         if not path or not os.path.isfile(path):
             continue
         try:

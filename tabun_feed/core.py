@@ -24,6 +24,7 @@ failures_to_db = 0
 gevent_threads = 0
 pidfile
 alivefile
+started_at_file
 username
 password
 session_id
