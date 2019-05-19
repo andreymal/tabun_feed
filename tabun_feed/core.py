@@ -42,7 +42,15 @@ tries_if_error = 10
 from = tabun_feed@example.com
 host = 127.0.0.1
 port = 25
+user
+password
+redirect_to
+dont_edit_subject_on_redirect = 0
 timeout = 3
+use_ssl = 0
+use_tls = 0
+ssl_keyfile
+ssl_certfile
 notify_to
 notify_subject = tabun_feed notify
 notify_from
@@ -232,51 +240,6 @@ def set_notify_func(func):
 
 
 def sendmail(to, subject, items, fro=None):
-    import smtplib
-    from base64 import b64encode
-    from email.mime.text import MIMEText
-    from email.mime.multipart import MIMEMultipart
-
-    if not items:
-        return False
-    if fro is None:
-        fro = text(config.get('email', 'from'))
-
-    if PY2:
-        if isinstance(to, text):
-            to = to.encode("utf-8")
-    else:
-        if isinstance(to, binary):
-            to = to.decode("utf-8")
-    if isinstance(subject, text):
-        subject = subject.encode("utf-8")
-    if isinstance(items, text):
-        items = items.encode("utf-8")
-
-    if isinstance(items, binary):
-        msg = MIMEText(items, 'plain', 'utf-8')
-    elif len(items) == 1:
-        msg = items[0]
-    else:
-        msg = MIMEMultipart()
-        for x in items:
-            msg.attach(x)
-
-    msg['From'] = fro
-    msg['To'] = to
-
-    subject_b64 = b64encode(subject)
-    if isinstance(subject_b64, binary):
-        subject_b64 = subject_b64.decode('ascii')
-    subject_b64 = "=?UTF-8?B?" + subject_b64 + "?="
-    msg['Subject'] = subject_b64.encode('ascii') if PY2 else subject_b64
-
-    try:
-        s = smtplib.SMTP(config.get('email', 'host'), config.getint('email', 'port'), timeout=config.getint('email', 'timeout'))
-        s.sendmail(fro, to, msg.as_string() if PY2 else msg.as_string().encode('utf-8'))
-        s.quit()
-    except Exception:
-        logger.error(traceback.format_exc())
-        return False
-
-    return True
+    # Обратная совместимость; лучше использовать tabun_feed.mail.sendmail напрямую
+    from tabun_feed.mail import sendmail as new_sendmail
+    return new_sendmail(to, subject, body=items, fro=fro)

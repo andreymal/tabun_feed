@@ -106,8 +106,26 @@ plugins = tabun_feed.readers.posts, :monitor
 # Порт SMTP-сервера
 # port = 25
 
+# Логин и пароль для аутентификации на почтовом сервере
+# user = tabun_feed@example.com
+# password = 123456
+
+# Отправлять все письма только на этот email; может быть полезно для отладки
+# redirect_to = admin@example.com
+# dont_edit_subject_on_redirect = 0
+
 # Максимальное время ожидания отправки
 # timeout = 3
+
+# Использовать SSL (лучше не надо)
+# use_ssl = 0
+
+# Использовать TLS (а вот это очень даже надо)
+# use_tls = 0
+
+# Пути к ключам и сертификатом для TLS-аутентификации почты
+# ssl_keyfile =
+# ssl_certfile =
 
 # Почта, на которую отправлять уведомления от плагинов
 # notify_to = admin@example.com
