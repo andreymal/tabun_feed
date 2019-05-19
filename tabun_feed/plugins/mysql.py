@@ -83,6 +83,12 @@ class DB(object):
             kwargs['db'] = self.database
 
         if data.scheme == 'unix':
+            if data.hostname:
+                raise ValueError(
+                    'hostname must be empty for unix socket; '
+                    'use unix:/path/to/socket or unix:///path/to/socket '
+                    'or unix://username:password@/path/to/socket'
+                )
             kwargs['host'] = 'localhost'
             kwargs['unix_socket'] = data.path
         else:
@@ -140,7 +146,7 @@ class DB(object):
         # select * from sometable where somecolumn = %s and somecolumn2 in (%s)
         if isinstance(sql, binary):
             sql = sql.decode('utf-8')
-
+        # FIXME: binary_args?
         in_args = ((('binary ' if binary else '') + self.escape(x)) for x in in_args)
         in_args = ', '.join(in_args)
         sql = sql.replace('(%s)', '(' + in_args.replace('%', '%%') + ')')

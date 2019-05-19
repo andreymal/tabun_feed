@@ -3,11 +3,11 @@
 
 from __future__ import unicode_literals
 
-from . import core
-
 import os
 import sqlite3
 from threading import RLock
+
+from . import core
 
 
 db = None
@@ -15,12 +15,13 @@ db = None
 
 class Database(object):
     def __init__(self, path):
-        self.created = not os.path.exists(path)
-        self.db = sqlite3.connect(path, check_same_thread=False)
+        self.path = os.path.abspath(path) if path != ':memory:' else path
+        self.db = sqlite3.connect(self.path, check_same_thread=False)
         self.lock = RLock()
         self.allow_commit = True
         self._cur = None
         self._tables = None
+        self.created = bool(self.tables)
 
     def __enter__(self):
         self.lock.acquire()
@@ -38,9 +39,8 @@ class Database(object):
 
     @property
     def tables(self):
-        if self._tables is not None:
-            return self._tables
-        self._tables = tuple(x[0] for x in self.query("select name from sqlite_master where type = ?", ("table",)))
+        if self._tables is None:
+            self._tables = tuple(x[0] for x in self.query("select name from sqlite_master where type = ?", ("table",)))
         return self._tables
 
     def create_table(self, name, data):

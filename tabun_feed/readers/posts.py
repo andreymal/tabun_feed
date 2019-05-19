@@ -4,6 +4,7 @@
 from __future__ import unicode_literals
 
 import time
+from datetime import datetime
 
 from tabun_api.compat import text
 
@@ -32,7 +33,7 @@ def reader():
 
     for post in posts:
         # слишком старые посты игнорируем
-        tm = time.mktime(post.time)
+        tm = (post.utctime - datetime(1970, 1, 1)).total_seconds()
         if tm < oldest_post_time:
             continue
 
@@ -129,8 +130,15 @@ def load_posts(last_post_time=None):
         # узнаём, сколько страниц нам разрешено качать
         if '#' in url:
             url, pages_count = url.split('#', 1)
-            pages_count = max(1, int(pages_count))
+            if ':' in pages_count:
+                min_pages_count, pages_count = pages_count.split(':', 1)
+                min_pages_count = max(1, int(min_pages_count))
+                pages_count = max(1, int(pages_count))
+            else:
+                min_pages_count = 1
+                pages_count = max(1, int(pages_count))
         else:
+            min_pages_count = 1
             pages_count = 1
 
         for page_num in range(1, pages_count + 1):
@@ -144,13 +152,14 @@ def load_posts(last_post_time=None):
                 pages.append(posts)
 
             # не качаем то, что качать не требуется
-            if last_post_time and time.mktime(posts[0].time) < last_post_time:
+            tm = (posts[0].utctime - datetime(1970, 1, 1)).total_seconds()
+            if page_num >= min_pages_count and last_post_time and tm < last_post_time:
                 # ^ посты отсортированы в API по времени в прямом порядке
                 break
 
     post_ids = []
     posts = []
-    for post in sorted(raw_posts, key=lambda x: x.time):
+    for post in sorted(raw_posts, key=lambda x: x.utctime):
         if post.post_id not in post_ids:
             # ^ исключаем возможные дубликаты (ориентируемся по айдишникам, а не содержимому целиком)
             posts.append(post)

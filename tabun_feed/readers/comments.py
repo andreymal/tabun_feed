@@ -3,7 +3,7 @@
 
 from __future__ import unicode_literals
 
-import time
+from datetime import datetime
 
 import tabun_api as api
 from tabun_api.compat import text
@@ -30,7 +30,7 @@ def reader():
     new_last_comment_time = None
 
     for comment in comments:
-        tm = time.mktime(comment.time)
+        tm = (comment.utctime - datetime(1970, 1, 1)).total_seconds()
         # слишком старые комментарии игнорируем
         if tm < oldest_comment_time:
             continue
@@ -87,8 +87,15 @@ def load_comments(last_comment_time=None):
         # узнаём, сколько страниц нам разрешено качать
         if '#' in url:
             url, pages_count = url.split('#', 1)
-            pages_count = max(1, int(pages_count))
+            if ':' in pages_count:
+                min_pages_count, pages_count = pages_count.split(':', 1)
+                min_pages_count = max(1, int(min_pages_count))
+                pages_count = max(1, int(pages_count))
+            else:
+                min_pages_count = 1
+                pages_count = max(1, int(pages_count))
         else:
+            min_pages_count = 1
             pages_count = 1
 
         for page_num in range(1, pages_count + 1):
@@ -107,7 +114,7 @@ def load_comments(last_comment_time=None):
                     raise
             worker.call_handlers('raw_data', current_url, raw_data)
 
-            comments = sorted(user.user.get_comments(current_url, raw_data=raw_data).values(), key=lambda x: x.time)
+            comments = sorted(user.user.get_comments(current_url, raw_data=raw_data).values(), key=lambda x: x.utctime)
             raw_comments.extend(comments)
             if page_num < 2:
                 pages.append(comments)
@@ -117,12 +124,13 @@ def load_comments(last_comment_time=None):
                 break
 
             # не качаем то, что качать не требуется
-            if last_comment_time and time.mktime(comments[0].time) < last_comment_time:
+            tm = (comments[0].utctime - datetime(1970, 1, 1)).total_seconds()
+            if page_num >= min_pages_count and last_comment_time and tm < last_comment_time:
                 break
 
     comment_ids = []
     comments = []
-    for comment in sorted(raw_comments, key=lambda x: x.time):
+    for comment in sorted(raw_comments, key=lambda x: x.utctime):
         if comment.comment_id not in comment_ids:
             comments.append(comment)
             comment_ids.append(comment.comment_id)
