@@ -6,7 +6,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='tabun_feed',
-    version='0.6.1',
+    version='0.6.2',
     description='Watcher of new content on tabun.everypony.ru',
     author='andreymal',
     author_email='andriyano-31@mail.ru',
@@ -15,7 +15,7 @@ setup(
     platforms=['linux', 'osx', 'bsd'],
     packages=find_packages(),
     include_package_data=True,
-    install_requires=['tabun_api>=0.7.0'],
+    install_requires=['tabun_api>=0.7.7'],
     zip_safe=False,
     entry_points={
         'console_scripts': [
@@ -33,5 +33,7 @@ setup(
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
     ],
 )
