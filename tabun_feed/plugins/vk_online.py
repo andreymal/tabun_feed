@@ -13,7 +13,7 @@ from tabun_feed.remote_server import remote_command
 vk_plug = core.load_plugin('tabun_feed.plugins.vk')
 vk = None
 
-targets = tuple(set(-x['id'] for x in vk_plug.targets.values() if x['id'] < 0))
+targets = tuple(set(-x['id'] for x in vk_plug.targets.values() if x is not None and x['id'] < 0))
 
 interval = 300
 last_align_time = None

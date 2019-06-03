@@ -97,8 +97,13 @@ def parse_vk_targets(line):
     line = [x.strip() for x in line.split(';') if x and ':' in x]
     result = {}
     for target in line:
+        # blog1,blog2,blog3: owner_id, prefix
         blogs, owner = [x.split(',') for x in target.split(':')]
         blogs = [x.strip() for x in blogs if x.strip()]
+
+        # Пустой owner_id — значит не постить посты из этих блогов
+        if owner[0].strip() == '_':
+            owner = ['0']
         owner_id = int(owner[0])
         prefix = None
         if len(owner) > 1:
@@ -111,7 +116,10 @@ def parse_vk_targets(line):
                 prefix = "id" + str(owner_id)
 
         for blog in blogs:
-            result[blog] = {'id': owner_id, 'prefix': prefix}
+            if owner_id:
+                result[blog] = {'id': owner_id, 'prefix': prefix}
+            else:
+                result[blog] = None
 
     return result
 

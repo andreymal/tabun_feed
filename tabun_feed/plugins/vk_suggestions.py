@@ -11,7 +11,7 @@ from tabun_feed import core, worker
 vk_plug = core.load_plugin('tabun_feed.plugins.vk')
 vk = None
 
-targets = tuple(set(-x['id'] for x in vk_plug.targets.values() if x['id'] < 0))
+targets = tuple(set(-x['id'] for x in vk_plug.targets.values() if x is not None and x['id'] < 0))
 iter_current = -1
 last_posts = []
 
