@@ -523,6 +523,7 @@ def start_thread(func, *args, **kwargs):
 
 def stop():
     quit_event.set()
+    call_handlers('stop')
     if handlers_thread is not None:
         if status['workers'] > 0 or not events.empty():
             core.logger.info('Waiting for shutdown workers (%s)', status['workers'])

@@ -33,9 +33,8 @@ dist: clean
 	ls -l dist
 
 install: clean
-	$(PYTHON) setup.py install
+	$(PIP) install .
 
 develop:
-	$(PIP) install -r requirements.txt
-	$(PIP) install -r optional-requirements.txt
-	$(PYTHON) setup.py develop
+	$(PIP) install -r requirements.txt -r optional-requirements.txt
+	$(PIP) install -e .

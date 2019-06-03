@@ -8,7 +8,7 @@ __pycache__/
 *.pyo
 
 # virtualenv
-/env/
+/env*
 
 # Distribution / packaging
 build/
