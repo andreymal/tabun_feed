@@ -45,7 +45,7 @@ def build_body(post):
 
     # Блог и информация об авторе под заголовком
     tg_body += '#{} (<a href="{}{}">{}</a>)'.format(
-        quote(post.blog or 'blog'),
+        quote(post.blog or 'blog').replace('-', '_'),
 
         post.context['http_host'],
         '/profile/{}/'.format(quote(post.author)),
