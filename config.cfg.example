@@ -241,3 +241,11 @@ read_updates = true
 # Печать входящих сообщений в лог (включено по умолчанию). Ничего не делает,
 # если read_updates = false
 log_incoming_messages = true
+
+
+## Настройки плагина tabun_feed.plugins.telegram_feed ##
+[telegram_feed]
+
+# В какой чат постить сообщения (он должен быть доступен боту).
+# Канал можно указать числом (начинается на -100) или адресом с собачкой в начале
+channel = @tabun_feed
