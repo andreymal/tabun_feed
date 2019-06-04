@@ -10,12 +10,14 @@ from tabun_api.compat import PY2, text
 from telegram import ParseMode
 
 from tabun_feed import core, worker, user
+from tabun_feed.plugins.telegram_feed.queue import FeedQueue, FeedQueueItem
+from tabun_feed.plugins.telegram_feed import utils as tg_utils
 
 if PY2:
-    from Queue import Queue, Empty as QueueEmpty
+    from Queue import Empty as QueueEmpty
     from urllib2 import quote
 else:
-    from queue import Queue, Empty as QueueEmpty
+    from queue import Empty as QueueEmpty
     from urllib.parse import quote
 
 
@@ -25,59 +27,26 @@ allowed_closed_blogs = {'NSFW'}  # TODO: настройка списка доп�
 
 # variables
 tg = core.load_plugin('tabun_feed.plugins.telegram')
-posts_queue = Queue()
+queue = FeedQueue()
+
+# Здесь хранится число попыток постинга. При превышении определённого значения
+# попытки прекращаются, чтобы не дудосить телеграм зазря
+post_tries = {}  # type: Dict[int, int]
 
 
-def tg_html_escape(s):
-    s = s.replace('&', '&amp;')
-    s = s.replace('<', '&lt;')
-    s = s.replace('>', '&gt;')
-    s = s.replace('"', '&quot;')
-    return s
-
-
-def build_body(post):
-    # type: (api.Post) -> text
-    fmt = api.utils.HTMLFormatter()
-
-    # Заголовок
-    tg_body = '<b>{}</b>\n'.format(tg_html_escape(post.title.strip()))
-
-    # Блог и информация об авторе под заголовком
-    tg_body += '#{} (<a href="{}{}">{}</a>)'.format(
-        quote(post.blog or 'blog').replace('-', '_'),
-
-        post.context['http_host'],
-        '/profile/{}/'.format(quote(post.author)),
-        tg_html_escape(post.author),
-    )
-
-    # Собственно текст поста (перед катом)
-    post_body = fmt.format(post.body, with_cutted=False)[:8200]
-    if len(post_body) >= 8200:
-        post_body = post_body[:post_body.rfind(' ')] + '… ->'
-
-    while '\n\n\n' in post_body:
-        post_body = post_body.replace('\n\n\n', '\n\n')
-
-    if post_body.endswith('\n====='):
-        post_body = post_body[:-6]
-
-    tg_body += '\n\n'
-    tg_body += tg_html_escape(post_body)
-
-    return tg_body.strip()
-
-
-def process_new_post(tm, target, post, full_post=None, extra_params=None):
-    # type: (float, Union[int, str], api.Post, Optional[api.Post], Optional[Dict[str, Any]]) -> None
+def process_new_post(item):
+    # type: (FeedQueueItem) -> None
     # Работает в отдельном потоке
+
+    target = default_target
+    assert target is not None
 
     # Скачиваем профиль автора для анализа
     # TODO: спискота известных юзеров, чтоб время на скачивание не тратить
+    worker.status['telegram_feed'] = 'Getting post author'
     for i in range(10):
         try:
-            author = user.anon.get_profile(post.author)
+            author = user.anon.get_profile(item.post.author)
             break
         except api.TabunError as exc:
             if i >= 9 or exc.code == 404:
@@ -85,61 +54,100 @@ def process_new_post(tm, target, post, full_post=None, extra_params=None):
             core.logger.warning('telegram_feed: get author profile error: %s', exc.message)
             time.sleep(3)
 
-    tg_body = build_body(post or full_post)
+    worker.status['telegram_feed'] = 'Process post'
 
     with_attachments = True  # TODO: заюзать
     with_link = True  # TODO: выпилить?
 
-    # Защищаемся от бризюкового понева
-    n = (full_post or post).body
+    n = item.post.body
     if author.rating < 30.0:
+        # Защищаемся от бризюкового понева
         with_attachments = False
-    if post.private:
+
+    if item.post.private:
+        # Не палим награнный контент из (полу)закрытых блогов
         with_link = False
         with_attachments = False
-    elif not with_attachments and (n.xpath('//img') or n.xpath('//embed') or n.xpath('//object') or n.xpath('//iframe')):
-        # Таким образом прячется картинка из превьюшки ссыки
+
+    if not with_attachments and with_link and (
+        n.xpath('//img') or n.xpath('//embed') or
+        n.xpath('//object') or n.xpath('//iframe')
+    ):
+        # Таким образом прячется картинка из превьюшки ссылки
         with_link = False
 
-    tg_body += '\n\n' + post.url
     with_link = False  # А зачем превьюшка в телеграме-то?
+
+    # Крепим фоточку
+    photo_url = None  # type: Optional[text]
+    if with_attachments:
+        photo_url = tg_utils.build_photo_attachment(item.post, item.full_post)
+
+    # Собираем текст поста со всем оформлением
+    # (его содержимое зависит от наличия или отсутствия фоточки)
+    tg_body = tg_utils.build_body(item.post, short=photo_url is not None)
+    tg_body += '\n\n' + item.post.url
+
+    worker.status['telegram_feed'] = 'Sending post'
 
     # Постим
     # (TODO: обработка ошибок)
-    tg.dispatcher.bot.send_message(
-        chat_id=target,
-        text=tg_body,
-        parse_mode=ParseMode.HTML,
-        disable_web_page_preview=not with_link,
-    )
+    if photo_url:
+        result = tg.dispatcher.bot.send_photo(
+            chat_id=target,
+            photo=photo_url,
+            caption=tg_body,
+            parse_mode=ParseMode.HTML,
+        )
+
+    else:
+        result = tg.dispatcher.bot.send_message(
+            chat_id=target,
+            text=tg_body,
+            parse_mode=ParseMode.HTML,
+            disable_web_page_preview=not with_link,
+        )
 
 
 def new_post(post, full_post=None):
     # type: (api.Post, Optional[api.Post]) -> None
 
-    tm = time.time()
-
     if post.private and post.blog not in api.halfclosed and post.blog not in allowed_closed_blogs:
         core.logger.debug('telegram_feed: post %d is closed', post.post_id)
         return
 
-    add_post_to_queue(post, full_post, tm=tm)
+    queue.add_post(post, full_post)
 
 
-def add_post_to_queue(post=None, full_post=None, tm=None, extra_params=None):
-    # type: (Optional[api.Post], Optional[api.Post], Optional[float], Optional[Dict[str, Any]]) -> None
+def new_blog(blog):
+    # с блогами со всякими там очередями и надёжностями не церемонимся, потребность в этом не особо есть
+    worker.status['telegram_feed'] = 'Sending blog'
+    target = default_target
 
-    if tm is None:
-        tm = time.time()
+    if blog.status != api.Blog.OPEN:
+        tg_body = 'Новый закрытый блог: ' + tg_utils.html_escape(blog.name)
+    else:
+        tg_body = 'Новый блог: ' + tg_utils.html_escape(blog.name)
+    tg_body += '\n#' + blog.blog.replace('-', '_')
+    tg_body += '\n\n' + blog.url
 
-    post = post or full_post
-    if post is None:
-        core.logger.error('telegram_feed: add_post_to_queue received empty post, this is a bug')
-        return
+    notify = False
+    try:
+        # Постим
+        # (TODO: нормальная обработка ошибок)
+        tg.dispatcher.bot.send_message(
+            chat_id=target,
+            text=tg_body,
+            parse_mode=ParseMode.HTML,
+            disable_web_page_preview=True,
+        )
+    except Exception:
+        notify = True
 
-    posts_queue.put((tm, default_target, post, full_post, extra_params))
-    core.logger.debug('telegram_feed: post %d added to queue', post.post_id)
-    return True
+    if notify:
+        core.notify('Не удалось запостить новый блог: ' + blog.url)
+
+    worker.status['vk'] = None
 
 
 # Основной поток, запускающий постилку постов из очереди
@@ -149,32 +157,37 @@ def new_post_thread():
     while True:
         # Достаём пост из очереди
         try:
-            # tm: float
-            # target: Union[int, str]
-            # post: api.Post
-            # full_post: Optional[api.Post]
-            # extra_params: Optional[Dict[str, Any]]
-            tm, target, post, full_post, extra_params = posts_queue.get(timeout=2)
+            item = queue.get(timeout=2)  # type: FeedQueueItem
         except QueueEmpty:
             if worker.quit_event.is_set():
                 break
             continue
 
         # Пашем
+        worker.status['telegram_feed_post'] = item.post.post_id
         notify_msg = None
+
         try:
+            assert item.post is not None
             with worker.status:
-                process_new_post(tm, target, post, full_post, extra_params=extra_params)
+                process_new_post(item)
+
         except (KeyboardInterrupt, SystemExit):
             raise
+
         except Exception as exc:
             worker.fail()
-            core.logger.debug('telegram_feed: post %d failed', post.post_id)
+            core.logger.debug('telegram_feed: post %d failed', item.post.post_id)
             notify_msg = 'Внутренняя ошибка сервера: {}'.format(text(exc))
 
+        finally:
+            worker.status['telegram_feed_post'] = None
+            worker.status['telegram_feed'] = None
+
+        # Если что-то сломалось или отменилось, то уведомляем админа
         if notify_msg is not None:
             # TODO: нормальное исключение, из которого можно достать причину ошибки
-            nbody = 'Не удалось запостить пост ' + post.url
+            nbody = 'Не удалось запостить пост ' + item.post.url
             if notify_msg:
                 nbody += '\n' + notify_msg
             core.notify(nbody)
@@ -194,8 +207,12 @@ def init_tabun_plugin():
     core.logger.debug('telegram_feed started')
     core.logger.debug('default target: %s', default_target)
 
+    worker.status['telegram_feed'] = None
+    worker.status['telegram_feed_post'] = None
+
     worker.add_handler('start', start)
     worker.add_handler('new_post', new_post)
+    worker.add_handler('new_blog', new_blog)
 
 
 def start():
