@@ -84,16 +84,23 @@ def message_handler(update, context):
 def start_telegram():
     if updater is None:
         return
+    assert dispatcher is not None
+
     if read_updates:
         core.logger.info('Starting Telegram updater thread')
         updater.start_polling()
     else:
         core.logger.info('Telegram started (updater thread is disabled)')
 
+    me = dispatcher.bot.get_me()
+    core.logger.info('Telegram bot logged in as @%s', me.username or '?')
+
 
 def stop_telegram():
     if updater is None:
         return
+    assert dispatcher is not None
+
     if read_updates:
         core.logger.info('Stopping Telegram updater thread...')
         updater.stop()
