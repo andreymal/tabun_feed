@@ -12,7 +12,7 @@ from telegram import ParseMode
 
 from tabun_feed import core, worker, user, db
 from tabun_feed.plugins.telegram_feed.queue import FeedQueueItem, queue
-from tabun_feed.plugins.telegram_feed import utils as tg_utils
+from tabun_feed.plugins.telegram_feed import store as tg_store, utils as tg_utils
 
 if PY2:
     from Queue import Empty as QueueEmpty
@@ -42,6 +42,8 @@ def process_new_post(item):
 
     target = default_target
     assert target is not None
+
+    start_time = time.time()
 
     # Скачиваем профиль автора для анализа
     # TODO: спискота известных юзеров, чтоб время на скачивание не тратить
@@ -109,6 +111,18 @@ def process_new_post(item):
         )
 
     assert result is not None
+    end_time = time.time()
+
+    # Сохраняем результат в базе
+    tg_store.save_post_status(
+        item.post.post_id,
+        processed_at=end_time,
+        status=tg_store.OK,
+        status_text=None,
+        process_duration=int(round(end_time - start_time)),
+        tg_chat_id=result.chat.id,
+        tg_message_id=result.message_id,
+    )
 
 
 # Обработчики событий
@@ -119,12 +133,15 @@ def new_post(post, full_post=None):
 
     if post.private and post.blog not in api.halfclosed and post.blog not in allowed_closed_blogs:
         core.logger.debug('telegram_feed: post %d is closed', post.post_id)
+        tg_store.save_post_status(post.post_id, status=tg_store.CLOSED, status_text=None, processed_at=None)
         return
 
     if post.draft:
         core.logger.debug('telegram_feed: post %d is draft', post.post_id)
+        tg_store.save_post_status(post.post_id, status=tg_store.CLOSED, status_text=None, processed_at=None)
         return
 
+    tg_store.save_post_status(post.post_id, status=tg_store.PENDING, status_text=None, processed_at=None)
     queue.add_post(post, full_post)
 
 
@@ -189,8 +206,28 @@ def new_post_thread():
 
         except Exception as exc:
             worker.fail()
-            core.logger.debug('telegram_feed: post %d failed', item.post.post_id)
             notify_msg = 'Внутренняя ошибка сервера: {}'.format(text(exc))
+
+            if post_tries[post_id] >= max_post_tries:
+                # Если было слишком много попыток — расстраиваемся и забиваем болт на пост
+                core.logger.warning('telegram_feed: post %d is too failed! Retrying only after restart.', post_id)
+                tg_store.save_post_status(
+                    post_id,
+                    status=tg_store.PENDING_FAILED,
+                    status_text=None,
+                    processed_at=None,
+                )
+
+            else:
+                # Если было не очень много попыток, то попробуем ещё раз попозже
+                queue.put(item)
+                core.logger.warning('telegram_feed: post %d failed', post_id)
+                tg_store.save_post_status(
+                    post_id,
+                    status=tg_store.FAILED,
+                    status_text=None,
+                    processed_at=None,
+                )
 
         finally:
             worker.status['telegram_feed_post'] = None
@@ -209,12 +246,66 @@ def new_post_thread():
         worker.quit_event.wait(10)
 
 
+def download_post_to_queue(post_id, reset_tries=False, check_exist=False, extra_params=None):
+    # type: (int, bool bool, Optional[Dict[str, Any]], Optional[FeedStoreItem]) -> bool
+
+    # Скачивает пост с Табуна и вызывает add_post_to_queue. Проверки
+    # на закрытость блога не выполняет.
+
+    if check_exist:
+        # Здесь никто не отменял гонку данных, так что это проверка выполняет
+        # роль просто защиты от дурака
+        if queue.has_post(post_id):
+            core.logger.debug('telegram_feed: Pending post %d already in queue', post_id)
+            return True
+
+    try:
+        full_post = user.user.get_post(post_id)
+
+    except api.TabunError as exc:
+        core.logger.warning('telegram_feed: Cannot download post %d: %s', post_id, exc.message)
+        tg_store.save_post_status(post_id, status=tg_store.NODOWNLOAD, status_text=None, processed_at=None)
+
+        return False
+
+    if reset_tries:
+        post_tries.pop(post_id, None)
+    queue.add_post(full_post=full_post, extra_params=extra_params)
+    return True
+
+
+def restore_queue_from_store(with_failed=False, with_pending_failed=False, reset_tries=False):
+    # Загружает PENDING и опционально FAILED и PENDING_FAILED посты
+    # из базы данных, в первую очередь чтобы восстановить очередь постов
+    # после перезапуска бота.
+
+    statuses = {tg_store.PENDING}
+    if with_failed:
+        statuses |= {tg_store.FAILED}
+    if with_pending_failed:
+        statuses |= {tg_store.PENDING_FAILED}
+
+    items = tg_store.get_rows_by_status(statuses)
+    if not items:
+        return
+    core.logger.info('telegram_feed: process %d pending posts', len(items))
+
+    for item in items:
+        if worker.quit_event.is_set():
+            break
+        post_id = item[0]
+        download_post_to_queue(post_id, reset_tries, check_exist=True)
+        worker.quit_event.wait(2)
+
+
 def init_tabun_plugin():
     global default_target
 
     if not core.config.has_option('telegram_feed', 'channel') or not core.config.get('telegram_feed', 'channel'):
         return
     default_target = core.config.get('telegram_feed', 'channel')
+
+    tg_store.check_db()
 
     core.logger.debug('telegram_feed started')
     core.logger.debug('default target: %s', default_target)
@@ -230,6 +321,7 @@ def init_tabun_plugin():
 
 def start():
     worker.start_thread(new_post_thread)
+    restore_queue_from_store(with_failed=True, with_pending_failed=True)
 
 
 def stop():
