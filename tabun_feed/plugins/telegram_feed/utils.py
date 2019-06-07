@@ -3,10 +3,12 @@
 
 from __future__ import unicode_literals, absolute_import
 
+import time
+
 import tabun_api as api
 from tabun_api.compat import PY2, text
 
-from tabun_feed import worker
+from tabun_feed import core, user, worker
 
 if PY2:
     from urllib2 import quote
@@ -128,3 +130,17 @@ def build_photo_attachment(post, full_post):
         image = None
 
     return image
+
+
+def get_post_author(author):
+    # type: (text) -> api.UserInfo
+    for i in range(10):
+        try:
+            author = user.anon.get_profile(author)
+            break
+        except api.TabunError as exc:
+            if i >= 9 or exc.code == 404 or worker.quit_event.is_set():
+                raise
+            core.logger.warning('telegram_feed: get author profile error: %s', exc.message)
+            time.sleep(3)
+    return author

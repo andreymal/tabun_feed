@@ -8,17 +8,16 @@ import time
 import tabun_api as api
 from tabun_api.compat import PY2, text
 from telegram import ParseMode
+# from telegram.message import Message
 
-from tabun_feed import core, worker, user
-from tabun_feed.plugins.telegram_feed.queue import FeedQueue, FeedQueueItem
+from tabun_feed import core, worker, user, db
+from tabun_feed.plugins.telegram_feed.queue import FeedQueueItem, queue
 from tabun_feed.plugins.telegram_feed import utils as tg_utils
 
 if PY2:
     from Queue import Empty as QueueEmpty
-    from urllib2 import quote
 else:
     from queue import Empty as QueueEmpty
-    from urllib.parse import quote
 
 
 # config
@@ -27,16 +26,19 @@ allowed_closed_blogs = {'NSFW'}  # TODO: настройка списка доп�
 
 # variables
 tg = core.load_plugin('tabun_feed.plugins.telegram')
-queue = FeedQueue()
 
 # Здесь хранится число попыток постинга. При превышении определённого значения
 # попытки прекращаются, чтобы не дудосить телеграм зазря
+# Сбрасывается при перезапуске бота
 post_tries = {}  # type: Dict[int, int]
+max_post_tries = 5
+
+
+# Функция, делающая основную работу (работает в отдельном потоке)
 
 
 def process_new_post(item):
     # type: (FeedQueueItem) -> None
-    # Работает в отдельном потоке
 
     target = default_target
     assert target is not None
@@ -44,19 +46,11 @@ def process_new_post(item):
     # Скачиваем профиль автора для анализа
     # TODO: спискота известных юзеров, чтоб время на скачивание не тратить
     worker.status['telegram_feed'] = 'Getting post author'
-    for i in range(10):
-        try:
-            author = user.anon.get_profile(item.post.author)
-            break
-        except api.TabunError as exc:
-            if i >= 9 or exc.code == 404:
-                raise
-            core.logger.warning('telegram_feed: get author profile error: %s', exc.message)
-            time.sleep(3)
+    author = tg_utils.get_post_author(item.post.author)
 
     worker.status['telegram_feed'] = 'Process post'
 
-    with_attachments = True  # TODO: заюзать
+    with_attachments = True
     with_link = True  # TODO: выпилить?
 
     n = item.post.body
@@ -91,16 +85,22 @@ def process_new_post(item):
     worker.status['telegram_feed'] = 'Sending post'
 
     # Постим
-    # (TODO: обработка ошибок)
+    result = None  # type: Optional[Message]
     if photo_url:
-        result = tg.dispatcher.bot.send_photo(
-            chat_id=target,
-            photo=photo_url,
-            caption=tg_body,
-            parse_mode=ParseMode.HTML,
-        )
+        try:
+            # Делаем попытку оптравки с фоточкой
+            result = tg.dispatcher.bot.send_photo(
+                chat_id=target,
+                photo=photo_url,
+                caption=tg_body,
+                parse_mode=ParseMode.HTML,
+            )
+        except Exception as exc:
+            # Если не получилось — попробуем второй раз без фоточки
+            core.logger.warning('telegram_feed: cannot send post with photo: %s', exc)
+            time.sleep(1)
 
-    else:
+    if result is None:
         result = tg.dispatcher.bot.send_message(
             chat_id=target,
             text=tg_body,
@@ -108,12 +108,21 @@ def process_new_post(item):
             disable_web_page_preview=not with_link,
         )
 
+    assert result is not None
+
+
+# Обработчики событий
+
 
 def new_post(post, full_post=None):
     # type: (api.Post, Optional[api.Post]) -> None
 
     if post.private and post.blog not in api.halfclosed and post.blog not in allowed_closed_blogs:
         core.logger.debug('telegram_feed: post %d is closed', post.post_id)
+        return
+
+    if post.draft:
+        core.logger.debug('telegram_feed: post %d is draft', post.post_id)
         return
 
     queue.add_post(post, full_post)
@@ -154,21 +163,24 @@ def new_blog(blog):
 
 
 def new_post_thread():
-    while True:
+    while not worker.quit_event.is_set():
         # Достаём пост из очереди
         try:
-            item = queue.get(timeout=2)  # type: FeedQueueItem
+            item = queue.get()  # type: Optional[FeedQueueItem]
         except QueueEmpty:
-            if worker.quit_event.is_set():
-                break
+            continue
+
+        if item is None:
+            # None обычно пихается при выключении бота, так что continue может выйти из цикла
             continue
 
         # Пашем
-        worker.status['telegram_feed_post'] = item.post.post_id
+        post_id = item.post.post_id
+        worker.status['telegram_feed_post'] = post_id
         notify_msg = None
+        post_tries[post_id] = post_tries.get(post_id, 0) + 1
 
         try:
-            assert item.post is not None
             with worker.status:
                 process_new_post(item)
 
@@ -211,9 +223,14 @@ def init_tabun_plugin():
     worker.status['telegram_feed_post'] = None
 
     worker.add_handler('start', start)
+    worker.add_handler('stop', stop)
     worker.add_handler('new_post', new_post)
     worker.add_handler('new_blog', new_blog)
 
 
 def start():
     worker.start_thread(new_post_thread)
+
+
+def stop():
+    queue.put(None)

@@ -5,14 +5,14 @@ from __future__ import unicode_literals, absolute_import
 
 import time
 
-from tabun_api.compat import PY2, text
+from tabun_api.compat import PY2
 
-from tabun_feed import core, db
+from tabun_feed import core
 
 if PY2:
-    from Queue import Queue, Empty as QueueEmpty
+    from Queue import Queue
 else:
-    from queue import Queue, Empty as QueueEmpty
+    from queue import Queue
 
 
 class FeedQueueItem(object):
@@ -32,7 +32,8 @@ class FeedQueue(object):
     # low level api
 
     def put(self, item):
-        if not isinstance(item, FeedQueueItem):
+        # type: (Optional[FeedQueueItem]) -> None
+        if item is not None and not isinstance(item, FeedQueueItem):
             raise TypeError
         self._queue.put(item)
 
@@ -41,9 +42,9 @@ class FeedQueue(object):
 
     def has_post(self, post_id):
         # Здесь никто не отменял гонку, так что это просто защита от дурака
-        for item in list(self._queue):
+        for item in list(self._queue.queue):
             post = item.full_post or item.post
-            if post == post_id:
+            if post.post_id == post_id:
                 return True
         return False
 
@@ -66,3 +67,6 @@ class FeedQueue(object):
 
         self._queue.put(item)
         core.logger.debug('telegram_feed: post %d added to queue', post.post_id)
+
+
+queue = FeedQueue()
