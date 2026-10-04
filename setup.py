@@ -6,7 +6,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='tabun_feed',
-    version='0.6.2',
+    version='0.6.3',
     description='Watcher of new content on tabun.everypony.ru',
     author='andreymal',
     author_email='andriyano-31@mail.ru',

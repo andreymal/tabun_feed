@@ -6,7 +6,7 @@ from __future__ import unicode_literals
 import smtplib
 import traceback
 from email.header import Header
-from email.utils import formataddr
+from email.utils import formataddr, formatdate, make_msgid
 from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -166,7 +166,15 @@ def sendmail(to, subject, body, fro=None, headers=None, conn=None):
     msg['From'] = fro
     msg['Subject'] = Header(subject, 'utf-8').encode()
 
-    prep_headers = {}
+    prep_headers = {
+         'Date': formatdate(localtime=False, usegmt=True),
+    }
+
+    if core.config.getboolean('email', 'generate_message_id'):
+        msgid_domain = core.config.get('email', 'message_id_domain') or fro.rsplit('@', 1)[-1].rstrip('>')
+        msgid = make_msgid().rsplit('@', 1)[0] + '@' + msgid_domain + '>'
+        prep_headers['Message-ID'] = msgid
+
     if headers:
         prep_headers.update(headers)
 

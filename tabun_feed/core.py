@@ -51,6 +51,8 @@ use_ssl = 0
 use_tls = 0
 ssl_keyfile
 ssl_certfile
+generate_message_id = 1
+message_id_domain
 notify_to
 notify_subject = tabun_feed notify
 notify_from
