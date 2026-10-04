@@ -20,7 +20,7 @@ def reader():
 
     if core.loglevel == core.logging.DEBUG:
         core.logger.debug('Downloaded %d comments, last 10: %s', len(comments), ", ".join(text(x.comment_id) for x in comments[-10:]))
-    
+
     new_comments = []
 
     comment_infos = get_comments_info(x.comment_id for x in comments)
@@ -30,6 +30,7 @@ def reader():
     new_last_comment_time = None
 
     for comment in comments:
+        if not comment.utctime: continue  # костыль для скрытых комментариев
         tm = (comment.utctime - datetime(1970, 1, 1)).total_seconds()
         # слишком старые комментарии игнорируем
         if tm < oldest_comment_time:
@@ -114,7 +115,7 @@ def load_comments(last_comment_time=None):
                     raise
             worker.call_handlers('raw_data', current_url, raw_data)
 
-            comments = sorted(user.user.get_comments(current_url, raw_data=raw_data).values(), key=lambda x: x.utctime)
+            comments = sorted(user.user.get_comments(current_url, raw_data=raw_data).values(), key=lambda x: x.comment_id)
             raw_comments.extend(comments)
             if page_num < 2:
                 pages.append(comments)
@@ -124,13 +125,14 @@ def load_comments(last_comment_time=None):
                 break
 
             # не качаем то, что качать не требуется
-            tm = (comments[0].utctime - datetime(1970, 1, 1)).total_seconds()
+            comments_with_dates = [x for x in comments if x.utctime is not None]
+            tm = (comments_with_dates[0].utctime - datetime(1970, 1, 1)).total_seconds()
             if page_num >= min_pages_count and last_comment_time and tm < last_comment_time:
                 break
 
     comment_ids = []
     comments = []
-    for comment in sorted(raw_comments, key=lambda x: x.utctime):
+    for comment in sorted(raw_comments, key=lambda x: x.comment_id):
         if comment.comment_id not in comment_ids:
             comments.append(comment)
             comment_ids.append(comment.comment_id)

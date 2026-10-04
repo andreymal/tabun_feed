@@ -42,7 +42,7 @@ def build_body(post, short=False):
 
     # Подпись к фоточкам у телеграма может быть не более 1024 символов
     # И ещё 120 символов резервируем про запас под ссылку и прочий хлам
-    max_len = (1024 if short else 8200) - len(tg_body) - 120
+    max_len = (1024 if short else 2000) - len(tg_body) - 120
 
     # Собственно текст поста (перед катом)
     post_body = fmt.format(post.body, with_cutted=False)[:max_len + 1]
@@ -69,14 +69,15 @@ def find_image(post):
     # Для начала поищем картинку, явно заданную пользователем
     img_forced = None
     for i in post.body.xpath('.//img')[:20]:
+        src = i.get('src')
         alt = i.get('alt')
         if not alt:
             continue
-        if alt.startswith('tf:http://') or alt.startswith('tf:https://'):
+        if alt.startswith('tf:http://') or alt.startswith('tf:https://') or alt.startswith('tf://'):
             img_forced = alt[3:]
             break
-        elif alt == 'tf:this' and i.get('src') and (i.get('src').startswith('http://') or i.get('src').startswith('https://')):
-            img_forced = i.get('src')
+        elif alt == 'tf:this' and src and (src.startswith('http://') or src.startswith('https://') or src.startswith('//')):
+            img_forced = src
             break
 
     if img_forced:

@@ -90,3 +90,8 @@ def init_tabun_plugin():
     api.User.get_posts = patched_get_posts
     api.User.get_comments = patched_get_comments
     api.User.get_profile = patched_get_profile
+
+    api.User.default_send_request = default_send_request
+    api.User.default_get_posts = default_get_posts
+    api.User.default_get_comments = default_get_comments
+    api.User.default_get_profile = default_get_profile

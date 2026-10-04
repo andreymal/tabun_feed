@@ -136,7 +136,7 @@ def process_group(group_id):
     if count == -1:
         return
 
-    online = len([True for x in usersdict.values() if x['online']])
+    online = len([True for x in usersdict.values() if x.get('online')])
 
     # подгружаем сохранённый список участников
     q = db.query('select user_id, leave_time from vk_members where group_id = ?', (group_id,))
