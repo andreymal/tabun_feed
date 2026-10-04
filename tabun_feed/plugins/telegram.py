@@ -5,10 +5,12 @@ from __future__ import unicode_literals, absolute_import
 
 import sys
 
+from telegram import Bot
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 # from telegram.ext.dispatcher import Dispatcher
 # from telegram.message import Message
 # from telegram.update import Update
+from telegram.utils.request import Request
 # from telegram.ext.callbackcontext import CallbackContext
 
 from tabun_feed import core, worker
@@ -26,6 +28,7 @@ fallback_message_text = 'Прости, я не знаю, что ответить
 
 # variables
 message_handlers = {0: [], 1: [], 2: []}
+bot = None  # type: Optional[Bot]
 updater = None  # type: Optional[Updater]
 dispatcher = None  # type: Optional[Dispatcher]
 
@@ -82,6 +85,7 @@ def message_handler(update, context):
 
 
 def start_telegram():
+    # type: () -> None
     if updater is None:
         return
     assert dispatcher is not None
@@ -97,6 +101,7 @@ def start_telegram():
 
 
 def stop_telegram():
+    # type: () -> None
     if updater is None:
         return
     assert dispatcher is not None
@@ -108,7 +113,8 @@ def stop_telegram():
 
 
 def init_tabun_plugin():
-    global updater, dispatcher, fallback_message_text, read_updates, log_incoming_messages
+    # type: () -> None
+    global bot, updater, dispatcher, fallback_message_text, read_updates, log_incoming_messages
 
     if not core.config.has_option('telegram', 'bot_token') or not core.config.get('telegram', 'bot_token'):
         return
@@ -119,7 +125,29 @@ def init_tabun_plugin():
         log_incoming_messages = core.config.getboolean('telegram', 'log_incoming_messages')
 
     bot_token = text(core.config.get('telegram', 'bot_token'))
-    updater = Updater(token=bot_token, use_context=True)
+
+    base_url = None  # type: Optional[str]
+    if core.config.has_option('telegram', 'base_url'):
+        base_url = text(core.config.get('telegram', 'base_url'))
+
+    base_file_url = None  # type: Optional[str]
+    if core.config.has_option('telegram', 'base_file_url'):
+        base_file_url = text(core.config.get('telegram', 'base_file_url'))
+
+    proxy_url = None  # type: Optional[str]
+    if core.config.has_option('telegram', 'proxy_url'):
+        proxy_url = text(core.config.get('telegram', 'proxy_url'))
+
+    workers = 4
+    con_pool_size = workers + 4
+
+    bot = Bot(
+        token=bot_token,
+        base_url=base_url,
+        base_file_url=base_file_url,
+        request=Request(con_pool_size=con_pool_size, proxy_url=proxy_url),
+    )
+    updater = Updater(bot=bot, workers=workers, use_context=True)
     dispatcher = updater.dispatcher
 
     h = MessageHandler(Filters.all, message_handler)
